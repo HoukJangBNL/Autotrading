@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(ls:*)",
+      "Bash(/Users/houkjang/opt/anaconda3/bin/python3 --version)",
+      "Bash(python3:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(cp:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(python:*)",
+      "Bash(mkdir:*)",
+      "Bash(DATABASE_URL=sqlite:///data/trading_dev.db alembic upgrade head)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker compose:*)",
+      "Bash(brew install:*)",
+      "Bash(grep:*)",
+      "Bash(alembic revision:*)",
+      "Bash(docker exec:*)",
+      "Bash(pre-commit:*)",
+      "Bash(pytest:*)"
+    ],
+    "deny": []
+  }
+}

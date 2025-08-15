@@ -1,0 +1,42 @@
+# Development Dockerfile with hot reloading
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    postgresql-dev \
+    git \
+    vim \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set work directory
+WORKDIR /app
+
+# Install Python development tools
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    ipython \
+    ipdb \
+    watchdog
+
+# Copy requirements
+COPY requirements.txt requirements-dev.txt ./
+
+# Install all dependencies
+RUN pip install --no-cache-dir -r requirements-dev.txt
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV ENVIRONMENT=development
+
+# Mount volumes for live code changes
+VOLUME ["/app/src", "/app/tests", "/app/config", "/app/logs", "/app/data"]
+
+# Expose ports
+EXPOSE 8080 5678
+
+# Run with watchdog for auto-reload
+CMD ["watchmedo", "auto-restart", "-d", "src", "-p", "*.py", "--", "python", "-m", "src.main"]

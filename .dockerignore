@@ -1,0 +1,66 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+ENV/
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.hypothesis/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# Documentation
+docs/
+*.md
+
+# Logs
+logs/
+*.log
+
+# Data
+data/
+backups/
+
+# Config
+.env
+config/token.json
+config/credentials.json
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# CI/CD
+.github/
+.travis.yml
+.gitlab-ci.yml
+
+# Development
+notebooks/
+scripts/
+tests/
