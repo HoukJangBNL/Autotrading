@@ -35,7 +35,7 @@ def test_database_url():
     """Get test database URL."""
     return os.environ.get(
         "TEST_DATABASE_URL",
-        "sqlite:///test_trading.db"
+        "postgresql://test_user:test_password@localhost/test_trading"
     )
 
 
@@ -102,6 +102,24 @@ def sample_candle():
         "close": 150.50,
         "volume": 1000000
     }
+
+
+@pytest.fixture(autouse=True)
+def reset_singletons():
+    """Reset singleton instances between tests."""
+    # Reset auth service singleton
+    import src.auth.auth_service
+    src.auth.auth_service._auth_instance = None
+    
+    # Reset historical fetcher singleton
+    import src.data.historical_data
+    src.data.historical_data._fetcher_instance = None
+    
+    yield
+    
+    # Cleanup after test
+    src.auth.auth_service._auth_instance = None
+    src.data.historical_data._fetcher_instance = None
 
 
 @pytest.fixture

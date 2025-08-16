@@ -14,13 +14,16 @@ Manages secure storage of OAuth tokens using keyring (primary) and encrypted dat
 - File storage compatibility for schwab-py
 
 ### OAuthManager
-Handles the OAuth2 flow and client creation.
+Handles the OAuth2 flow and client creation with enhanced security features.
 
 **Features:**
-- OAuth2 authentication flow
-- Client creation from saved tokens
-- Automatic token refresh
-- API connection testing
+- OAuth2 authentication flow with PKCE (Proof Key for Code Exchange)
+- State parameter for CSRF protection
+- Manual authorization URL generation (`get_authorization_url()`)
+- Authorization code exchange (`exchange_code_for_token()`)
+- Token refresh with retry logic (`refresh_access_token()`)
+- Token expiration monitoring (`is_token_expiring_soon()`)
+- Token status information (`get_token_info()`)
 
 ### AuthService
 High-level service managing the authentication lifecycle.
@@ -30,6 +33,19 @@ High-level service managing the authentication lifecycle.
 - Automatic token refresh every 5 days
 - Context manager support
 - Comprehensive error handling
+
+## Initial Setup
+
+Run the interactive authentication setup:
+```bash
+python scripts/auth_setup.py
+```
+
+This will:
+1. Verify your Schwab API credentials
+2. Start a local HTTPS server for OAuth callback
+3. Open your browser for Schwab login
+4. Save tokens securely in system keychain
 
 ## Usage
 
@@ -47,7 +63,7 @@ await auth_service.initialize()
 client = auth_service.get_client()
 
 # Make API calls
-response = client.get_account_numbers()
+response = await client.get_account_numbers()
 
 # Shutdown when done
 await auth_service.shutdown()
@@ -70,7 +86,29 @@ from src.auth import get_authenticated_client
 
 # Automatically initializes if needed
 client = await get_authenticated_client()
-response = client.get_account_numbers()
+response = await client.get_account_numbers()
+```
+
+### Direct OAuth Manager Usage
+```python
+from src.auth.oauth_manager import OAuthManager
+
+oauth_manager = OAuthManager()
+
+# Generate authorization URL
+auth_url = oauth_manager.get_authorization_url()
+print(f"Visit: {auth_url}")
+
+# After user authorizes, exchange code for token
+token_data = await oauth_manager.exchange_code_for_token(callback_url)
+
+# Check token status
+token_info = oauth_manager.get_token_info()
+print(f"Token valid: {token_info['is_valid']}")
+print(f"Expires: {token_info['expires_at']}")
+
+# Manual token refresh
+await oauth_manager.refresh_access_token()
 ```
 
 ## Token Storage
@@ -93,25 +131,41 @@ The module provides custom exceptions:
 - `TokenStorageError` - Storage operation failed
 - `APITestError` - API test failed
 
+## Token Lifecycle
+
+1. **Initial Token**: Valid for 30 minutes (access) and 7 days (refresh)
+2. **Automatic Refresh**: Triggers 24 hours before expiration
+3. **Manual Refresh**: Available via `refresh_access_token()`
+4. **Re-authentication**: Required after 7 days or on refresh failure
+
 ## Testing
 
-Run the test script to verify authentication:
+Run the authentication setup:
 ```bash
-python scripts/test_auth.py
+python scripts/auth_setup.py
 ```
 
 Run unit tests:
 ```bash
-pytest tests/test_auth/ -v
+pytest tests/test_oauth_manager.py -v
 ```
 
-## Security Notes
+The test suite covers:
+- OAuth flow generation and validation
+- Token exchange and refresh
+- Error scenarios and retry logic
+- Token expiration checking
+- Client token updates
 
-1. **Never commit tokens** - The module ensures tokens are never logged
-2. **Keyring security** - Primary storage uses OS keyring
-3. **Database encryption** - Backup tokens are encrypted
-4. **Token expiration** - Automatic refresh before expiration
-5. **API key safety** - Store in .env file, never in code
+## Security Features
+
+1. **PKCE Implementation**: Protects against authorization code interception
+2. **State Parameter**: CSRF protection for OAuth flow
+3. **Keychain Storage**: Tokens stored in OS-level secure storage
+4. **Encryption**: Database backup uses Fernet encryption
+5. **Token Rotation**: Automatic refresh before expiration
+6. **No Token in Logs**: Sensitive data never logged
+7. **Retry Logic**: Exponential backoff for transient failures
 
 ## Troubleshooting
 
@@ -130,9 +184,13 @@ print(keyring.get_keyring())
 
 ### Authentication Fails
 1. Verify Schwab app credentials in .env
-2. Check callback URL matches app settings
-3. Ensure you're logged into Schwab account
+2. Check callback URL matches app settings (https://127.0.0.1:8182)
+3. Ensure your app is in "Ready for Use" status
 4. Try deleting existing token and re-authenticating
+5. Check if refresh token has expired (7 days)
+
+### SSL Certificate Warning
+This is normal for the local callback server. The auth setup script uses a self-signed certificate. Click "Advanced" and "Proceed to 127.0.0.1" in your browser.
 
 ## Environment Variables
 

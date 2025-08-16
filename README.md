@@ -21,7 +21,7 @@ A comprehensive automated stock trading system using the Charles Schwab API with
 - Python 3.10 or higher
 - Charles Schwab brokerage account
 - Schwab API credentials (API key and app secret)
-- PostgreSQL (for production) or SQLite (for development)
+- PostgreSQL
 - Redis (for caching and pub/sub)
 
 ## Installation

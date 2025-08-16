@@ -44,12 +44,8 @@ class DatabaseService:
         )
         
         # Async engine for high-performance operations
-        if db_url.startswith('sqlite'):
-            # SQLite doesn't support async well, use sync
-            async_url = db_url
-        else:
-            # Convert to async URL for PostgreSQL
-            async_url = db_url.replace('postgresql://', 'postgresql+asyncpg://')
+        # Convert to async URL for PostgreSQL
+        async_url = db_url.replace('postgresql://', 'postgresql+asyncpg://')
         
         self.async_engine = create_async_engine(
             async_url,

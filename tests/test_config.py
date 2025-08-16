@@ -56,7 +56,7 @@ class TestSettings:
     def test_database_settings_defaults(self):
         """Test database settings default values."""
         settings = DatabaseSettings()
-        assert settings.database_url == "sqlite:///trading.db"
+        assert settings.database_url == "postgresql://user:password@localhost/trading"
         assert settings.redis_url == "redis://localhost:6379/0"
         assert settings.pool_size == 20
         assert settings.max_overflow == 40
@@ -108,10 +108,10 @@ class TestSettings:
             system=SystemSettings(environment="development")
         )
         
-        # Development should use SQLite
-        dev_url = settings.get_database_url()
-        assert "sqlite:///" in dev_url
-        assert "trading_dev.db" in dev_url
+        # Should always use configured database URL
+        url = settings.get_database_url()
+        assert "postgresql://" in url
+        assert url == settings.database.database_url
         
         # Production should use configured URL
         settings.system.environment = "production"

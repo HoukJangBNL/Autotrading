@@ -26,11 +26,11 @@ class DatabaseSettings(BaseSettings):
     """Database configuration."""
     
     model_config = SettingsConfigDict(
-        env_prefix="DATABASE_",
+        env_prefix="",  # Remove prefix to match .env file
         case_sensitive=False
     )
     
-    database_url: str = "sqlite:///trading.db"
+    database_url: str = "postgresql://user:password@localhost/trading"
     redis_url: str = "redis://localhost:6379/0"
     pool_size: int = 20
     max_overflow: int = 40
@@ -143,11 +143,8 @@ class Settings(BaseSettings):
     
     def get_database_url(self) -> str:
         """Get appropriate database URL based on environment."""
-        if self.is_production:
-            return self.database.database_url
-        else:
-            # Use SQLite for development
-            return f"sqlite:///{self.data_dir}/trading_dev.db"
+        # Always use the configured database URL (PostgreSQL)
+        return self.database.database_url
 
 
 @lru_cache()
@@ -156,3 +153,7 @@ def get_settings() -> Settings:
     from dotenv import load_dotenv
     load_dotenv()  # Ensure .env is loaded
     return Settings()
+
+
+# Create a global settings instance
+settings = get_settings()
