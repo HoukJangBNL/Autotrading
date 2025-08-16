@@ -184,4 +184,6 @@ htmlcov/
 coverage.xml
 
 # Docker volumes
-docker/volumes/
+docker/volumes/config/schwab_token.json
+account_info.json
+.schwab_token.json

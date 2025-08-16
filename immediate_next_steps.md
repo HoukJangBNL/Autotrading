@@ -124,7 +124,8 @@ from typing import Optional, Dict
 from urllib.parse import urlparse, parse_qs
 
 import httpx
-from schwab import auth, Client
+from schwab import auth
+from schwab.client import Client
 from schwab.auth import TokenMetadata
 
 from .token_store import TokenStore
