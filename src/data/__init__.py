@@ -5,6 +5,7 @@ from .models import (
     Base, PriceData, Trade, Position, Strategy, Backtest,
     AccountSummary, MarketData, Alert
 )
+from .quote_service import Quote, QuoteHistory, QuoteService, create_quote_service
 
 __all__ = [
     # Database
@@ -23,4 +24,10 @@ __all__ = [
     'AccountSummary',
     'MarketData',
     'Alert',
+    
+    # Quote Service
+    'Quote',
+    'QuoteHistory',
+    'QuoteService',
+    'create_quote_service',
 ]
