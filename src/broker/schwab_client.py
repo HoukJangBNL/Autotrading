@@ -10,8 +10,8 @@ from functools import wraps
 import httpx
 from httpx import Response
 
-from schwab.orders import EquityInstruction, OrderType, Duration, Session
-from schwab.orders.generic import OrderBuilder
+# from schwab.orders import EquityInstruction, OrderType, Duration, Session
+# from schwab.orders.generic import OrderBuilder
 
 from ..auth.auth_service import get_auth_service
 from ..auth.exceptions import AuthenticationError
@@ -64,7 +64,6 @@ class SchwabBroker:
     """
     
     _instance: Optional['SchwabBroker'] = None
-    _lock: asyncio.Lock = asyncio.Lock()
     _initialized: bool = False
     
     # API endpoints
@@ -108,6 +107,7 @@ class SchwabBroker:
         self.client = None
         self._account_numbers = None
         self._account_hash_map = {}  # Map account numbers to hash values
+        self._lock = None  # Will be created when needed
         
     async def initialize(self):
         """
@@ -115,9 +115,16 @@ class SchwabBroker:
         
         Ensures thread-safe initialization of auth service and client.
         """
+        # Create lock if not exists (bound to current event loop)
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+            
         async with self._lock:
             if self._initialized and self.client:
                 return
+                
+            # Set initializing flag to prevent recursive init
+            self._initializing = True
                 
             try:
                 # Initialize auth service if not provided
@@ -125,8 +132,11 @@ class SchwabBroker:
                     self.auth_service = get_auth_service()
                     await self.auth_service.initialize()
                 
+                # Ensure auth service is authenticated
+                await self.auth_service.ensure_authenticated()
+                
                 # Get authenticated client
-                self.client = await self.auth_service.get_authenticated_client()
+                self.client = self.auth_service.get_client()
                 
                 # Initialize rate limiter if not provided
                 if not self.rate_limiter:
@@ -153,11 +163,15 @@ class SchwabBroker:
             except Exception as e:
                 logger.error(f"Failed to initialize SchwabBroker: {e}")
                 raise BrokerConnectionError(f"Failed to initialize broker: {e}")
+            finally:
+                # Clear initializing flag
+                self._initializing = False
     
     async def _load_account_numbers(self):
         """Load and cache account numbers with their hash values."""
         try:
-            response = await self._make_request("GET", "/accounts/accountNumbers")
+            # Use the client's built-in method
+            response = await self.client.get_account_numbers()
             accounts = response.json()
             
             self._account_numbers = []
@@ -244,8 +258,8 @@ class SchwabBroker:
         Raises:
             Various BrokerError subclasses based on response
         """
-        # Ensure initialization
-        if not self._initialized:
+        # Ensure initialization - but only if we're not already initializing
+        if not self._initialized and not hasattr(self, '_initializing'):
             await self.initialize()
         
         # Check circuit breaker
@@ -525,14 +539,14 @@ class SchwabBroker:
     async def place_order(
         self,
         account_number: str,
-        order: Union[Dict[str, Any], OrderBuilder]
+        order: Union[Dict[str, Any], Any]  # OrderBuilder when available
     ) -> Dict[str, Any]:
         """
         Place an order.
         
         Args:
             account_number: Account number
-            order: Order dict or OrderBuilder object
+            order: Order dict or OrderBuilder object (when available)
             
         Returns:
             Order confirmation with order ID
@@ -695,10 +709,50 @@ class SchwabBroker:
         if end_date:
             params['endDate'] = int(end_date.timestamp() * 1000)
         
-        endpoint = f"/marketdata/v1/pricehistory"
-        params['symbol'] = symbol
+        # Use the appropriate client method based on frequency
+        if frequency_type == "minute" and frequency == 1:
+            response = await self.client.get_price_history_every_minute(
+                symbol=symbol,
+                start_datetime=start_date,
+                end_datetime=end_date,
+                need_extended_hours_data=need_extended_hours,
+                need_previous_close=need_previous_close
+            )
+        elif frequency_type == "minute" and frequency == 5:
+            response = await self.client.get_price_history_every_five_minutes(
+                symbol=symbol,
+                start_datetime=start_date,
+                end_datetime=end_date,
+                need_extended_hours_data=need_extended_hours,
+                need_previous_close=need_previous_close
+            )
+        elif frequency_type == "daily":
+            response = await self.client.get_price_history_every_day(
+                symbol=symbol,
+                start_datetime=start_date,
+                end_datetime=end_date,
+                need_previous_close=need_previous_close
+            )
+        else:
+            # Fallback to generic method
+            # This requires the schwab-py enums
+            import schwab
+            
+            period_type_enum = getattr(schwab.client.Client.PriceHistory.PeriodType, period_type.upper(), None)
+            frequency_type_enum = getattr(schwab.client.Client.PriceHistory.FrequencyType, frequency_type.upper(), None)
+            
+            response = await self.client.get_price_history(
+                symbol=symbol,
+                period_type=period_type_enum,
+                period=period,
+                frequency_type=frequency_type_enum,
+                frequency=frequency,
+                start_datetime=start_date,
+                end_datetime=end_date,
+                extended_hours_data=need_extended_hours,
+                need_previous_close=need_previous_close
+            )
         
-        response = await self._make_request("GET", endpoint, params=params)
         return response.json()
     
     # Utility Methods
