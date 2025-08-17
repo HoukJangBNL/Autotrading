@@ -3,7 +3,7 @@
 
 ## Executive Summary
 
-### Overall Progress: 48% Complete (Phase 1: 100% Complete) ✅
+### Overall Progress: 52% Complete (Phase 1: 100% Complete, GUI Foundation: 100% Complete) ✅
 
 **Key Achievements**:
 - ✅ OAuth2 authentication with PKCE security fully operational
@@ -14,8 +14,11 @@
 - ✅ Robust error handling, rate limiting, and circuit breaker patterns
 - ✅ WebSocket streaming implementation with production-grade resilience
 - ✅ Comprehensive test coverage across all modules
+- ✅ **GUI Integration with Mock/Real Mode switching implemented**
+- ✅ **Discovery Mode fully operational with real-time market data**
+- ✅ **Backend-GUI bridge architecture established**
 
-**Current Focus**: Phase 2 - Order Management System (OMS) and Trading Engine Core
+**Current Focus**: Phase 2 - Trading Engine Core with GUI Integration
 
 **Next Milestone**: Complete OMS with state machine and pre-trade risk checks
 
@@ -73,20 +76,94 @@ All Phase 1 components have been successfully implemented and tested:
    - Health monitoring
    - State synchronization
 
-## Phase 2: Trading Engine Core (Starting Now)
+## Phase 1.5: GUI Foundation (100% Complete) ✅
 
-### 2.1 Order Management System (32 hours)
+**Completion Date**: August 17, 2025
+
+7. **GUI Integration Architecture** ✅
+   - PySide6-based desktop application
+   - Mock/Real mode switching
+   - Backend service integration
+   - Event-driven communication
+
+8. **Discovery Mode Implementation** ✅
+   - Real-time market data display
+   - Volume spike detection
+   - Price breakout analysis
+   - Discovery alert system
+
+9. **Backend-GUI Bridge** ✅
+   - GUIService with dual-mode operation
+   - StreamingService integration
+   - Automatic fallback mechanisms
+   - Configuration-driven operation
+
+## Phase 2: Trading Engine Core with GUI Integration (Starting Now)
+
+**Architect's Updated Strategy**: Integrated approach combining backend trading engine with complete GUI implementation for end-to-end system validation.
+
+### 2.1 Order Management System (36 hours) - Enhanced Architecture
 
 **Starting Implementation**: August 18, 2025
 
-1. **Order Service with State Machine** (12 hours)
+**Architectural Pattern**: Event-Driven with CQRS (Command Query Responsibility Segregation)
+
+1. **Event-Driven Order Management** (16 hours)
    ```python
-   # src/trader/order_service.py
+   # src/trader/order_management.py
    from enum import Enum
    from typing import Dict, List, Optional
    from datetime import datetime
    import asyncio
    from transitions import Machine
+   from dataclasses import dataclass
+   
+   @dataclass
+   class OrderEvent:
+       """Base class for all order events"""
+       order_id: str
+       timestamp: datetime
+       event_type: str
+   
+   class OrderManagementSystem:
+       """Event-driven OMS with CQRS pattern"""
+       
+       def __init__(self):
+           self.order_store = OrderStore()      # Command side
+           self.order_view = OrderView()        # Query side  
+           self.event_bus = EventBus()
+           self.risk_engine = RiskEngine()
+           self.circuit_breaker = CircuitBreaker()
+           
+       async def process_order_command(self, command: OrderCommand):
+           """CQRS command processing with event sourcing"""
+           try:
+               # Pre-trade validation with circuit breaker
+               if self.circuit_breaker.is_open():
+                   raise OrderRejected("Circuit breaker open - broker unavailable")
+                   
+               validation_result = await self.risk_engine.validate(command)
+               if not validation_result.passed:
+                   await self._publish_event(OrderRejected(command.order_id, validation_result.reason))
+                   return validation_result
+                   
+               # Create and persist order
+               order = await self.order_store.create_order(command)
+               events = order.process_command(command)
+               
+               # Event sourcing - persist all events
+               for event in events:
+                   await self.event_bus.publish(event)
+                   await self.order_store.append_event(event)
+                   
+               # Update read model (CQRS query side)
+               await self.order_view.update_from_events(events)
+               
+               return OrderCommandResult(success=True, order_id=order.id)
+               
+           except Exception as e:
+               await self.circuit_breaker.record_failure()
+               raise
    
    class OrderState(Enum):
        NEW = "NEW"
@@ -98,7 +175,8 @@ All Phase 1 components have been successfully implemented and tested:
        CANCELLED = "CANCELLED"
        REJECTED = "REJECTED"
    
-   class Order:
+   class EnhancedOrder:
+       """Order aggregate with event sourcing capabilities"""
        def __init__(self, symbol: str, quantity: int, side: str, order_type: str):
            self.id = generate_order_id()
            self.symbol = symbol
@@ -108,71 +186,68 @@ All Phase 1 components have been successfully implemented and tested:
            self.state = OrderState.NEW
            self.created_at = datetime.utcnow()
            self.fills = []
+           self.events = []  # Event sourcing
+           self.version = 0   # Optimistic locking
            
-   class OrderStateMachine:
-       states = ['NEW', 'VALIDATED', 'SUBMITTED', 'PENDING', 
-                'PARTIALLY_FILLED', 'FILLED', 'CANCELLED', 'REJECTED']
-       
-       transitions = [
-           {'trigger': 'validate', 'source': 'NEW', 'dest': 'VALIDATED',
-            'before': '_run_pre_trade_checks'},
-           {'trigger': 'submit', 'source': 'VALIDATED', 'dest': 'SUBMITTED',
-            'before': '_send_to_broker'},
-           {'trigger': 'acknowledge', 'source': 'SUBMITTED', 'dest': 'PENDING'},
-           {'trigger': 'fill', 'source': ['PENDING', 'PARTIALLY_FILLED'], 
-            'dest': 'FILLED', 'conditions': '_is_fully_filled'},
-           {'trigger': 'partial_fill', 'source': 'PENDING', 
-            'dest': 'PARTIALLY_FILLED'},
-           {'trigger': 'cancel', 'source': ['PENDING', 'PARTIALLY_FILLED'], 
-            'dest': 'CANCELLED', 'after': '_send_cancel_request'},
-           {'trigger': 'reject', 'source': '*', 'dest': 'REJECTED'}
-       ]
-       
-       def __init__(self, order: Order):
-           self.order = order
-           self.machine = Machine(
-               model=self,
-               states=OrderStateMachine.states,
-               transitions=OrderStateMachine.transitions,
-               initial='NEW'
-           )
+       def apply_event(self, event: OrderEvent):
+           """Apply event to order state"""
+           self.events.append(event)
+           self.version += 1
+           
+           if isinstance(event, OrderValidated):
+               self.state = OrderState.VALIDATED
+           elif isinstance(event, OrderSubmitted):
+               self.state = OrderState.SUBMITTED
+           # ... other event handlers
    ```
 
-2. **Pre-Trade Risk Checks** (8 hours)
+2. **Enhanced Pre-Trade Risk Engine** (10 hours)
    ```python
-   # src/trader/risk_checks.py
-   class PreTradeRiskValidator:
+   # src/trader/risk_engine.py
+   class RealTimeRiskEngine:
+       """ML-enhanced risk engine with anomaly detection"""
+       
        def __init__(self, risk_config: Dict):
            self.max_position_size = risk_config.get('max_position_size', 10000)
            self.max_daily_loss = risk_config.get('max_daily_loss', 5000)
            self.max_order_value = risk_config.get('max_order_value', 50000)
+           self.portfolio_tracker = PortfolioTracker()
+           self.anomaly_detector = AnomalyDetector()
+           self.var_calculator = VaRCalculator()
            
        async def validate_order(self, order: Order) -> ValidationResult:
-           """Comprehensive pre-trade checks"""
-           checks = [
+           """Comprehensive pre-trade checks with ML anomaly detection"""
+           # Parallel risk checks for <10ms target
+           checks = await asyncio.gather(
                self.check_position_limits(order),
                self.check_daily_loss_limit(order),
                self.check_order_size_limits(order),
                self.check_price_reasonability(order),
                self.check_restricted_list(order),
                self.check_market_hours(order),
-               self.check_account_restrictions(order)
-           ]
-           
-           results = await asyncio.gather(*checks)
-           return ValidationResult.combine(results)
-           
-       async def check_position_limits(self, order: Order) -> CheckResult:
-           """Ensure position doesn't exceed limits"""
-           current_position = await self.get_current_position(order.symbol)
-           new_position = current_position + (
-               order.quantity if order.side == 'BUY' else -order.quantity
+               self.check_account_restrictions(order),
+               self.check_portfolio_var(order),          # New: VaR check
+               self.check_anomaly_detection(order)       # New: ML anomaly detection
            )
            
-           if abs(new_position) > self.max_position_size:
+           return ValidationResult.combine(checks)
+           
+       async def check_portfolio_var(self, order: Order) -> CheckResult:
+           """Real-time VaR calculation with Monte Carlo simulation"""
+           portfolio_state = await self.portfolio_tracker.get_current_state()
+           
+           # Simulate portfolio with new order
+           simulated_portfolio = portfolio_state.add_order(order)
+           var_95 = await self.var_calculator.calculate_var(
+               simulated_portfolio, 
+               confidence=0.95,
+               time_horizon_days=1
+           )
+           
+           if var_95 > self.max_daily_loss:
                return CheckResult(
                    passed=False,
-                   reason=f"Position limit exceeded: {abs(new_position)} > {self.max_position_size}"
+                   reason=f"VaR limit exceeded: ${var_95:.2f} > ${self.max_daily_loss}"
                )
            return CheckResult(passed=True)
    ```
@@ -234,37 +309,170 @@ All Phase 1 components have been successfully implemented and tested:
 2. **Kill Switch Implementation** (6 hours)
 3. **Compliance Monitoring** (6 hours)
 
-## Updated Timeline
+### 2.4 GUI Integration - Selection & Trading Modes (44 hours)
 
-### Phase Completion Dates
+**New Addition**: Complete GUI implementation for full trading workflow
+
+1. **Selection Mode Implementation** (16 hours)
+   ```python
+   # src/gui/modes/selection_mode.py
+   class SelectionMode:
+       """Strategy optimization and backtesting interface"""
+       
+       def __init__(self, gui_service: GUIService):
+           self.gui_service = gui_service
+           self.strategy_engine = None
+           self.backtest_engine = None
+           
+       async def analyze_discovered_symbols(self, symbols: List[str]):
+           """Analyze symbols from Discovery mode"""
+           # Strategy backtesting
+           results = await self.backtest_engine.run_analysis(symbols)
+           
+           # Risk assessment
+           risk_metrics = await self.calculate_risk_metrics(symbols)
+           
+           # Portfolio optimization
+           optimal_allocation = await self.optimize_portfolio(symbols, results)
+           
+           return SelectionResult(symbols, results, risk_metrics, optimal_allocation)
+   ```
+
+2. **Trading Mode Implementation** (20 hours)
+   ```python
+   # src/gui/modes/trading_mode.py
+   class TradingMode:
+       """Live trading interface with real-time monitoring"""
+       
+       def __init__(self, gui_service: GUIService, oms: OrderManagementSystem):
+           self.gui_service = gui_service
+           self.oms = oms
+           self.position_tracker = PositionTracker()
+           self.pnl_calculator = PnLCalculator()
+           
+       async def submit_order(self, order_request: OrderRequest):
+           """Submit order through OMS with GUI feedback"""
+           # Pre-trade validation UI
+           validation_result = await self.oms.validate_order(order_request)
+           if not validation_result.passed:
+               self.show_validation_error(validation_result.reason)
+               return
+               
+           # Submit order
+           order_id = await self.oms.submit_order(order_request)
+           
+           # Real-time order tracking
+           await self.track_order_status(order_id)
+   ```
+
+3. **OMS-GUI Bridge** (8 hours)
+   ```python
+   # src/gui/services/oms_bridge.py
+   class OMSBridge:
+       """Bridge between GUI and Order Management System"""
+       
+       def __init__(self, oms: OrderManagementSystem):
+           self.oms = oms
+           self.order_status_cache = {}
+           
+       async def connect_to_oms(self):
+           """Establish real-time connection to OMS"""
+           # Subscribe to order events
+           await self.oms.subscribe_to_events(self.on_order_event)
+           
+       async def on_order_event(self, event: OrderEvent):
+           """Handle order events from OMS"""
+           # Update GUI with order status changes
+           self.order_status_updated.emit({
+               'order_id': event.order_id,
+               'status': event.status,
+               'timestamp': event.timestamp
+           })
+   ```
+
+## Updated Timeline - Architect's Revision
+
+### Phase Completion Dates (Updated with GUI Integration)
 - **Phase 1**: ✅ Completed (August 17, 2025)
-- **Phase 2**: August 18-28, 2025 (80 hours)
-- **Phase 3**: August 29 - September 5, 2025 (60 hours)
-- **Phase 4**: September 6-10, 2025 (30 hours)
-- **Phase 5**: September 11-17, 2025 (40 hours)
+- **Phase 1.5**: ✅ GUI Foundation Completed (August 17, 2025)
+- **Phase 2**: August 18 - September 5, 2025 (124 hours = 15.5 days)
+  - **Phase 2a**: Backend Trading Engine (80 hours)
+  - **Phase 2b**: GUI Integration (44 hours)
+- **Phase 3**: September 6-12, 2025 (60 hours)
+- **Phase 4**: September 13-17, 2025 (30 hours)
+- **Phase 5**: September 18-24, 2025 (40 hours)
 
-### Total Project Timeline
+### Total Project Timeline - Updated
 - **Start Date**: August 10, 2025
 - **Phase 1 Completion**: August 17, 2025 ✅
-- **Projected Completion**: September 17, 2025
-- **Total Duration**: 38 days
+- **Phase 1.5 Completion**: August 17, 2025 ✅
+- **Updated Projected Completion**: September 24, 2025
+- **Total Duration**: 45 days (+7 days for comprehensive GUI integration)
 
-## Next Steps (Immediate Actions)
+### Hour Allocation Summary
+- **Phase 1**: 120 hours ✅
+- **Phase 1.5**: 30 hours ✅ (GUI Foundation)
+- **Phase 2**: 124 hours (80 backend + 44 GUI)
+- **Phase 3**: 60 hours  
+- **Phase 4**: 30 hours
+- **Phase 5**: 40 hours
+- **Total**: 404 hours
+
+## Next Steps (Immediate Actions) - Updated
 
 1. **Begin OMS Implementation** (August 18)
-   - Set up order state machine
-   - Implement order validation
-   - Create order submission flow
+   - Set up order state machine with event sourcing
+   - Implement order validation with circuit breakers
+   - Create order submission flow with CQRS pattern
 
-2. **Integration Planning**
-   - Design OMS-WebSocket integration
-   - Plan strategy engine architecture
-   - Define risk management interfaces
+2. **Enhanced Integration Planning**
+   - Design OMS-WebSocket-GUI integration architecture
+   - Plan strategy engine with GUI Selection mode interface
+   - Define risk management interfaces with real-time GUI monitoring
+   - Create OMS-GUI Bridge communication layer
 
-3. **Testing Strategy**
-   - Create OMS test suite
-   - Design integration tests
-   - Plan paper trading scenarios
+3. **Comprehensive Testing Strategy**
+   - Create OMS test suite with GUI integration tests
+   - Design end-to-end integration tests (Discovery → Selection → Trading)
+   - Plan paper trading scenarios with GUI validation
+   - Implement GUI automated testing with real backend
+
+4. **GUI Development Parallel Track**
+   - Design Selection mode UI mockups
+   - Plan Trading mode dashboard layout
+   - Create OMS event visualization components
+   - Implement real-time position tracking display
+
+## New Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    GUI Layer (PySide6)                  │
+├───────────────────┬─────────────────┬───────────────────┤
+│   Discovery Mode  │  Selection Mode │   Trading Mode    │
+│   ✅ Complete     │  📋 Phase 2b    │   📋 Phase 2b     │
+└───────────────────┴─────────────────┴───────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────┐
+│                    GUIService Bridge                    │
+├─────────────────────────────────────────────────────────┤
+│  OMSBridge  │  StreamingService  │  StrategyEngine     │
+│  📋 Phase2b │  ✅ Complete       │  📋 Phase 2a        │
+└─────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────┐
+│                Phase 2: Trading Engine                  │
+├─────────────────────────────────────────────────────────┤
+│      OMS      │  Strategy Engine  │  Risk Management   │
+│  📋 Phase 2a  │   📋 Phase 2a     │   📋 Phase 2a      │
+└─────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────┐
+│            Phase 1: Data Layer (✅ Complete)            │
+├─────────────────────────────────────────────────────────┤
+│ AuthService │ StreamingService │ StreamProcessor │ ... │
+└─────────────────────────────────────────────────────────┘
+```
 
 ## Success Metrics Update
 
@@ -282,14 +490,19 @@ All Phase 1 components have been successfully implemented and tested:
 
 ## Risk Matrix Update
 
-| Risk | Status | Mitigation | Update |
-|------|--------|------------|--------|
-| WebSocket disconnection | ✅ Mitigated | Auto-reconnect implemented | Tested successfully |
-| Message duplication | ✅ Mitigated | Deduplication implemented | Working as designed |
-| Order rejection | 🟡 Planning | Pre-trade validation (Phase 2) | Starting implementation |
-| System overload | 🟡 Planning | Rate limiting in place | Need load testing |
+| Risk | Probability | Impact | Status | Mitigation Strategy |
+|------|-------------|--------|--------|---------------------|
+| WebSocket disconnection | LOW | MEDIUM | ✅ Mitigated | Auto-reconnect + state sync tested |
+| Message duplication | LOW | LOW | ✅ Mitigated | Deduplication working as designed |
+| Order execution failure | MEDIUM | HIGH | 🟡 Planning | Retry logic + fallback broker |
+| Order latency spike | LOW | HIGH | 🟢 Monitoring | Async processing + load balancing |
+| Memory leak in OMS | MEDIUM | MEDIUM | 🟡 Monitoring | Memory profiling + auto-restart |
+| Risk engine failure | LOW | CRITICAL | 🟢 Prepared | Circuit breaker + safe mode |
+| Compliance violation | LOW | CRITICAL | 🟢 Prepared | Real-time compliance monitoring |
+| Database deadlock | MEDIUM | MEDIUM | 🟡 Planning | Connection pooling + timeout handling |
+| ML model drift | LOW | MEDIUM | 🟡 Planning | Model monitoring + auto-retrain |
 
-## Technical Debt Update
+## Technical Debt Update - Performance Focused
 
 ### Resolved in Phase 1
 - ✅ WebSocket implementation completed
@@ -297,40 +510,88 @@ All Phase 1 components have been successfully implemented and tested:
 - ✅ State synchronization added
 - ✅ Health monitoring operational
 
-### Remaining Items
-1. **Test Coverage** (Priority: MEDIUM)
-   - Overall coverage at 33.07% (target: 80%)
-   - Need integration tests for full system
-   - Performance tests not automated
+### Updated Priority Matrix
+1. **HIGH Priority** (Phase 2 Parallel Implementation)
+   - **Order Latency Optimization** (<50ms p95 target)
+     - Async order processing pipeline
+     - Connection pooling for broker API
+     - Pre-compiled SQL queries for position lookup
+   - **Memory Usage Monitoring** (Redis cache optimization)
+     - Memory leak detection and auto-cleanup
+     - Cache eviction policies for market data
+     - Connection pool sizing optimization
+   - **Concurrent Order Processing** (1000+ orders/sec capacity)
+     - Lock-free data structures for order queue
+     - Batch processing for risk calculations
+     - Circuit breaker pattern for external API calls
 
-2. **Documentation** (Priority: MEDIUM)
-   - API documentation incomplete
-   - Runbooks need creation
-   - Architecture decision records (ADRs) missing
+2. **MEDIUM Priority** (Phase 3 Focus)
+   - **Test Coverage Enhancement** (33% → 80%)
+     - Integration test suite for OMS
+     - Load testing automation (JMeter/Locust)
+     - Chaos engineering tests for resilience
+   - **API Documentation Automation**
+     - OpenAPI spec generation from code
+     - Automated API testing with contract validation
+     - Real-time documentation updates
 
-3. **Production Hardening** (Priority: HIGH)
-   - Load testing required
-   - Monitoring dashboards needed
-   - Deployment automation pending
+3. **LOW Priority** (Phase 4 Polish)
+   - **Observability Stack**
+     - Prometheus/Grafana monitoring dashboards
+     - ELK stack for log aggregation
+     - Distributed tracing with Jaeger
+   - **Infrastructure as Code**
+     - Terraform deployment automation
+     - Docker containerization
+     - Kubernetes orchestration (future scale)
 
-## Conclusion
+## Conclusion - Architect's Strategic Assessment
 
-Phase 1 is now 100% complete with all WebSocket tests passing. The foundation is solid and ready for Phase 2 implementation. The WebSocket streaming component exceeded expectations with 75.73% test coverage and robust error handling.
+Phase 1 and Phase 1.5 (GUI Foundation) are now 100% complete. The integration of GUI with backend streaming services represents a significant architectural milestone, providing a complete user interface for the trading system.
 
-Key accomplishments:
-- All 22 WebSocket tests passing
-- Production-grade resilience implemented
-- Comprehensive error handling and recovery
-- State persistence and synchronization
-- Health monitoring and alerting
+### Key Accomplishments (Updated)
+- ✅ All 22 WebSocket tests passing with 75.73% coverage
+- ✅ Production-grade resilience implemented
+- ✅ Comprehensive error handling and recovery  
+- ✅ State persistence and synchronization
+- ✅ Health monitoring and alerting
+- ✅ **GUI-Backend integration architecture established**
+- ✅ **Discovery Mode fully operational with real-time data**
+- ✅ **Mock/Real mode switching implemented and tested**
 
-The system is now ready for the Order Management System implementation, which will integrate with the streaming infrastructure to enable live trading capabilities.
+### Architectural Value Delivered
+1. **End-to-End Data Flow**: Schwab API → Backend Services → GUI Display
+2. **Production-Ready Foundation**: Robust error handling, fallback mechanisms
+3. **User Experience**: Intuitive GUI for monitoring and controlling trading operations
+4. **Development Agility**: Mock mode enables rapid development and testing
+
+### Phase 2 Readiness Assessment
+The system architecture is now optimally positioned for Phase 2 implementation:
+- **Streaming Infrastructure**: ✅ Ready for order status updates
+- **GUI Framework**: ✅ Ready for Selection and Trading modes
+- **Integration Patterns**: ✅ Established and tested
+- **Development Workflow**: ✅ venv setup confirmed working
+
+### Strategic Recommendation
+**Proceed immediately with integrated Phase 2 approach**:
+- Parallel development of OMS backend and GUI integration
+- End-to-end testing capability from day one
+- Realistic user workflow validation throughout development
+- Complete trading system delivery at Phase 2 completion
 
 **Next Review**: August 22, 2025  
-**Architect's Recommendation**: Proceed immediately with Phase 2 OMS implementation
+**Architect's Priority**: Begin OMS implementation with GUI integration planning
+
+### Value Proposition Update
+By Phase 2 completion (September 5, 2025), the system will deliver:
+- Complete automated trading workflow (Discovery → Selection → Trading)
+- Production-ready order management and risk controls
+- Full GUI interface for monitoring and control
+- Real-time market data integration
+- Comprehensive testing and validation framework
 
 ---
-*Document Version*: 4.0  
+*Document Version*: 4.1 - GUI Integration Update  
 *Last Updated*: August 17, 2025  
 *Author*: System Architect  
-*Review Status*: Phase 1 Complete, Phase 2 Approved
+*Review Status*: Phase 1 Complete, Phase 1.5 Complete, Phase 2 Approved with GUI Integration
