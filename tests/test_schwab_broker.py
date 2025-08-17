@@ -28,7 +28,9 @@ def mock_auth_service():
     """Create mock auth service."""
     auth_service = AsyncMock()
     auth_service.initialize = AsyncMock()
-    auth_service.get_authenticated_client = AsyncMock()
+    auth_service.ensure_authenticated = AsyncMock()
+    auth_service.get_client = Mock()  # This returns a client, not a coroutine
+    auth_service.shutdown = AsyncMock()
     return auth_service
 
 
@@ -54,13 +56,16 @@ def mock_client():
 @pytest.fixture
 async def schwab_broker(mock_auth_service, mock_client):
     """Create SchwabBroker instance with mocks."""
-    mock_auth_service.get_authenticated_client.return_value = mock_client
+    # Reset singleton before each test
+    SchwabBroker.reset_instance()
     
-    # Reset singleton
-    SchwabBroker._instance = None
-    SchwabBroker._initialized = False
+    # Fix: Mock get_client() instead of get_authenticated_client()
+    mock_auth_service.get_client.return_value = mock_client
     
-    broker = SchwabBroker(auth_service=mock_auth_service)
+    # Create instance with mocked auth service
+    broker = SchwabBroker(
+        auth_service=mock_auth_service
+    )
     
     # Mock account loading
     with patch.object(broker, '_load_account_numbers', new_callable=AsyncMock) as mock_load:
@@ -72,7 +77,10 @@ async def schwab_broker(mock_auth_service, mock_client):
         }
         await broker.initialize()
     
-    return broker
+    yield broker
+    
+    # Cleanup after test
+    SchwabBroker.reset_instance()
 
 
 class TestSchwabBrokerSingleton:
@@ -87,13 +95,14 @@ class TestSchwabBrokerSingleton:
     @pytest.mark.asyncio
     async def test_singleton_thread_safety(self, mock_auth_service, mock_client):
         """Test thread-safe initialization."""
-        mock_auth_service.get_authenticated_client.return_value = mock_client
+        mock_auth_service.get_client.return_value = mock_client
         
         # Reset singleton
-        SchwabBroker._instance = None
-        SchwabBroker._initialized = False
+        SchwabBroker.reset_instance()
         
-        broker = SchwabBroker(auth_service=mock_auth_service)
+        broker = SchwabBroker(
+            auth_service=mock_auth_service
+        )
         
         # Mock account loading
         with patch.object(broker, '_load_account_numbers', new_callable=AsyncMock):
@@ -570,7 +579,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_context_manager(self, mock_auth_service, mock_client):
         """Test context manager support."""
-        mock_auth_service.get_authenticated_client.return_value = mock_client
+        mock_auth_service.get_client.return_value = mock_client
         
         # Reset singleton
         SchwabBroker._instance = None
@@ -591,7 +600,7 @@ class TestConvenienceFunctions:
         """Test get_schwab_broker convenience function."""
         with patch('src.broker.schwab_client.get_auth_service') as mock_get_auth:
             mock_get_auth.return_value = mock_auth_service
-            mock_auth_service.get_authenticated_client.return_value = mock_client
+            mock_auth_service.get_client.return_value = mock_client
             
             # Reset singleton
             SchwabBroker._instance = None

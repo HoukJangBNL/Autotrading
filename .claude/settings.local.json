@@ -22,7 +22,9 @@
       "Bash(docker exec:*)",
       "Bash(pre-commit:*)",
       "Bash(pytest:*)",
-      "mcp__sequential-thinking__sequentialthinking"
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }

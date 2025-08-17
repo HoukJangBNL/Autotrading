@@ -19,6 +19,17 @@ from src.data.database import DatabaseService
 from src.data.models import Base
 from src.utils.logger import setup_logging
 
+# Import websocket exceptions
+try:
+    from websockets.exceptions import ConnectionClosed
+except ImportError:
+    # Create a dummy exception if websockets not installed
+    class ConnectionClosed(Exception):
+        def __init__(self, code, reason):
+            self.code = code
+            self.reason = reason
+            super().__init__(f"WebSocket closed: {code} {reason}")
+
 
 # Configure logging for tests
 setup_logging()
@@ -219,3 +230,41 @@ def docker_services():
         # Stop container if we started it
         if os.getenv("TEST_KEEP_DOCKER", "false").lower() != "true":
             os.system("docker-compose -f docker-compose.test.yml down")
+
+
+@pytest.fixture
+def mock_websocket_connection():
+    """Create a properly mocked WebSocket connection."""
+    ws = Mock()
+    
+    # Create async mock methods
+    async def mock_send(data):
+        pass
+    
+    async def mock_recv():
+        # Default behavior - just wait
+        await asyncio.sleep(0.1)
+        raise ConnectionClosed(None, None)
+    
+    async def mock_close():
+        pass
+    
+    ws.send = mock_send
+    ws.recv = mock_recv
+    ws.close = mock_close
+    
+    return ws
+
+
+@pytest.fixture
+def valid_streaming_params():
+    """Valid streaming parameters for testing."""
+    return {
+        'token': 'test_token',
+        'app_id': 'test_app',
+        'streamer_url': 'wss://test.schwab.com',
+        'user_group': 'ACCT',
+        'access_level': 'ACCT',
+        'acl': 'test_acl',
+        'timestamp': int(time.time() * 1000)
+    }

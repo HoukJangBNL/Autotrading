@@ -12,7 +12,9 @@ This module provides a robust WebSocket connection manager that handles:
 import asyncio
 import json
 import time
-from datetime import datetime, timezone
+import random
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Callable, Any, Set
 from enum import Enum
 import logging
@@ -24,6 +26,9 @@ from websockets.exceptions import WebSocketException, ConnectionClosed
 from ..auth.auth_service import get_auth_service
 from ..utils.logger import get_logger
 from .stream_processor import StreamProcessor, Tick, TickType
+from .websocket_state import ConnectionStateManager, StateStorage
+from .message_dedup import MessageDeduplicator
+from .websocket_health import WebSocketHealthMonitor, HealthAlert, AlertSeverity
 
 logger = get_logger(__name__)
 
@@ -66,9 +71,10 @@ class SchwabWebSocketClient:
     
     # Connection parameters
     HEARTBEAT_INTERVAL = 30  # seconds
-    RECONNECT_MAX_ATTEMPTS = 5
+    RECONNECT_MAX_ATTEMPTS = 10  # Increased for production
     RECONNECT_BASE_DELAY = 1  # seconds
     RECONNECT_MAX_DELAY = 60  # seconds
+    RECONNECT_JITTER_FACTOR = 0.3  # 30% jitter
     
     # Message queue settings
     MESSAGE_QUEUE_SIZE = 10000
@@ -77,7 +83,11 @@ class SchwabWebSocketClient:
         self,
         stream_processor: StreamProcessor,
         account_id: str,
-        auth_service=None
+        auth_service=None,
+        enable_deduplication: bool = True,
+        enable_health_monitoring: bool = True,
+        state_storage: StateStorage = StateStorage.FILE,
+        connection_id: Optional[str] = None
     ):
         """
         Initialize WebSocket client.
@@ -86,17 +96,50 @@ class SchwabWebSocketClient:
             stream_processor: Stream processor instance for handling ticks
             account_id: Schwab account ID for streaming
             auth_service: Optional auth service instance
+            enable_deduplication: Enable message deduplication
+            enable_health_monitoring: Enable health monitoring
+            state_storage: Storage backend for state persistence
+            connection_id: Unique connection ID (generated if not provided)
         """
         self.stream_processor = stream_processor
         self.account_id = account_id
         self.auth_service = auth_service
+        self.connection_id = connection_id or str(uuid.uuid4())
         
         # Connection state
         self.websocket: Optional[Any] = None  # WebSocket connection object
         self.state = ConnectionState.DISCONNECTED
         self.streaming_params: Optional[Dict[str, Any]] = None
         
-        # Subscriptions
+        # State management
+        self.state_manager = ConnectionStateManager(
+            connection_id=self.connection_id,
+            account_id=account_id,
+            storage_backend=state_storage,
+            checkpoint_interval=30
+        )
+        
+        # Message deduplication
+        self.enable_deduplication = enable_deduplication
+        self.deduplicator: Optional[MessageDeduplicator] = None
+        if enable_deduplication:
+            self.deduplicator = MessageDeduplicator(
+                expected_messages_per_minute=10000,
+                false_positive_rate=0.001,
+                retention_minutes=5
+            )
+        
+        # Health monitoring
+        self.enable_health_monitoring = enable_health_monitoring
+        self.health_monitor: Optional[WebSocketHealthMonitor] = None
+        if enable_health_monitoring:
+            self.health_monitor = WebSocketHealthMonitor(
+                connection_id=self.connection_id,
+                check_interval=10,
+                alert_callback=self._handle_health_alert
+            )
+        
+        # Subscriptions (will be restored from state if available)
         self.subscriptions: Dict[str, Set[str]] = {}  # service -> symbols
         self.pending_subscriptions: List[Dict[str, Any]] = []
         
@@ -113,12 +156,13 @@ class SchwabWebSocketClient:
         # Reconnection
         self._reconnect_attempts = 0
         self._last_connect_time: Optional[float] = None
+        self._consecutive_failures = 0
         
         # Running state
         self._running = False
         self._shutdown_event = asyncio.Event()
         
-        logger.info(f"WebSocket client initialized for account {account_id}")
+        logger.info(f"WebSocket client initialized for account {account_id} with connection ID {self.connection_id}")
     
     async def connect(self) -> bool:
         """
@@ -133,6 +177,22 @@ class SchwabWebSocketClient:
         
         try:
             self.state = ConnectionState.CONNECTING
+            
+            # Initialize state manager and recover state
+            recovered = await self.state_manager.initialize()
+            if recovered:
+                # Restore subscriptions from state
+                self.subscriptions = self.state_manager.state.subscriptions
+                self._message_id = self.state_manager.state.last_message_id
+                logger.info(f"Recovered state with {len(self.subscriptions)} subscription services")
+            
+            # Start deduplicator
+            if self.deduplicator:
+                await self.deduplicator.start()
+            
+            # Start health monitor
+            if self.health_monitor:
+                await self.health_monitor.start()
             
             # Get streaming parameters from auth service
             if not self.streaming_params:
@@ -164,18 +224,31 @@ class SchwabWebSocketClient:
             # Now authenticate
             await self._authenticate()
             
+            # Record successful connection
+            self.state_manager.record_connection()
+            if self.health_monitor:
+                self.health_monitor.record_heartbeat()
+            
             # Resubscribe to previous subscriptions
             if self.subscriptions:
                 await self._resubscribe_all()
             
             # Reset reconnect attempts on successful connection
             self._reconnect_attempts = 0
+            self._consecutive_failures = 0
             
             return True
             
         except Exception as e:
             logger.error(f"Connection failed: {e}")
             self.state = ConnectionState.ERROR
+            self._consecutive_failures += 1
+            
+            # Record error
+            self.state_manager.record_error(str(e))
+            if self.health_monitor:
+                self.health_monitor.record_error()
+            
             await self._handle_connection_failure()
             return False
     
@@ -205,6 +278,15 @@ class SchwabWebSocketClient:
             finally:
                 self.websocket = None
         
+        # Shutdown components
+        await self.state_manager.shutdown()
+        
+        if self.deduplicator:
+            await self.deduplicator.stop()
+        
+        if self.health_monitor:
+            await self.health_monitor.stop()
+        
         self.state = ConnectionState.DISCONNECTED
         logger.info("WebSocket disconnected")
     
@@ -229,12 +311,22 @@ class SchwabWebSocketClient:
                 self.subscriptions[data_type] = set()
             self.subscriptions[data_type].update(symbols)
         
+        # Update state manager
+        self.state_manager.update_subscriptions(data_type, self.subscriptions.get(data_type, set()))
+        
+        # Update health monitor
+        if self.health_monitor:
+            total_subscriptions = sum(len(symbols) for symbols in self.subscriptions.values())
+            self.health_monitor.update_subscription_count(total_subscriptions)
+        
         if self.state != ConnectionState.AUTHENTICATED:
             # Queue subscription for when we're connected
-            self.pending_subscriptions.append({
+            subscription = {
                 'symbols': symbols,
                 'data_types': data_types
-            })
+            }
+            self.pending_subscriptions.append(subscription)
+            self.state_manager.add_pending_subscription(subscription)
             logger.info(f"Queued subscription for {len(symbols)} symbols")
             return
         
@@ -441,6 +533,9 @@ class SchwabWebSocketClient:
         while self.pending_subscriptions:
             sub = self.pending_subscriptions.pop(0)
             await self._send_subscription_request(sub['symbols'], sub['data_types'])
+        
+        # Clear pending subscriptions in state
+        self.state_manager.clear_pending_subscriptions()
     
     async def _send_message(self, message: Dict[str, Any]):
         """Send message to WebSocket."""
@@ -473,8 +568,7 @@ class SchwabWebSocketClient:
     
     def _get_next_request_id(self) -> int:
         """Get next message request ID."""
-        self._message_id += 1
-        return self._message_id
+        return self.state_manager.get_next_message_id()
     
     # Background tasks
     
@@ -498,6 +592,11 @@ class SchwabWebSocketClient:
                     }
                     await self._send_message(heartbeat)
                     logger.debug("Heartbeat sent")
+                    
+                    # Record heartbeat
+                    self.state_manager.record_heartbeat()
+                    if self.health_monitor:
+                        self.health_monitor.record_heartbeat()
                     
             except Exception as e:
                 logger.error(f"Heartbeat error: {e}")
@@ -533,6 +632,18 @@ class SchwabWebSocketClient:
         """Process incoming WebSocket message."""
         try:
             data = json.loads(message)
+            
+            # Check for duplicate
+            if self.deduplicator and self.deduplicator.is_duplicate(data):
+                logger.debug("Duplicate message detected, skipping")
+                if self.health_monitor:
+                    self.health_monitor.record_duplicate()
+                return
+            
+            # Record message received
+            self.state_manager.record_message_received()
+            if self.health_monitor:
+                self.health_monitor.record_message()
             
             # Handle response to our requests
             if 'response' in data:
@@ -630,7 +741,29 @@ class SchwabWebSocketClient:
                         tick_type=TickType.TRADE,
                         sequence_id=sequence
                     )
+                    
+                    # Check sequence for duplicates
+                    if sequence and not self.state_manager.should_process_message(symbol, int(sequence)):
+                        logger.debug(f"Skipping duplicate trade for {symbol} with sequence {sequence}")
+                        continue
+                    
+                    # Update sequence number
+                    if sequence:
+                        self.state_manager.update_sequence_number(symbol, int(sequence))
+                    
                     await self.stream_processor.add_tick(trade_tick)
+                    
+                    # Record latency if trade time is available
+                    if trade_time and self.health_monitor:
+                        try:
+                            # Parse trade time and calculate latency
+                            trade_timestamp = int(trade_time) / 1000  # Convert to seconds
+                            now = time.time()
+                            latency_ms = (now - trade_timestamp) * 1000
+                            if 0 < latency_ms < 10000:  # Sanity check
+                                self.health_monitor.record_latency(latency_ms)
+                        except:
+                            pass
                     
             except Exception as e:
                 logger.error(f"Error processing market data for {symbol}: {e}")
@@ -656,11 +789,15 @@ class SchwabWebSocketClient:
         while self._running and self._reconnect_attempts < self.RECONNECT_MAX_ATTEMPTS:
             self._reconnect_attempts += 1
             
-            # Calculate backoff delay
-            delay = min(
+            # Calculate backoff delay with jitter
+            base_delay = min(
                 self.RECONNECT_BASE_DELAY * (2 ** (self._reconnect_attempts - 1)),
                 self.RECONNECT_MAX_DELAY
             )
+            
+            # Add jitter to prevent thundering herd
+            jitter = base_delay * self.RECONNECT_JITTER_FACTOR * (2 * random.random() - 1)
+            delay = base_delay + jitter
             
             logger.info(
                 f"Reconnection attempt {self._reconnect_attempts}/{self.RECONNECT_MAX_ATTEMPTS} "
@@ -676,6 +813,49 @@ class SchwabWebSocketClient:
         
         logger.error("Max reconnection attempts reached")
         self.state = ConnectionState.ERROR
+        
+        # Trigger critical alert
+        if self.health_monitor:
+            self.health_monitor._check_metric(
+                'connection_failed',
+                self._reconnect_attempts,
+                self.RECONNECT_MAX_ATTEMPTS - 2,
+                self.RECONNECT_MAX_ATTEMPTS,
+                f"WebSocket connection failed after {self._reconnect_attempts} attempts"
+            )
+    
+    def _handle_health_alert(self, alert: HealthAlert):
+        """Handle health monitoring alerts."""
+        if alert.severity == AlertSeverity.CRITICAL:
+            logger.error(f"CRITICAL health alert: {alert.message}")
+        elif alert.severity == AlertSeverity.WARNING:
+            logger.warning(f"Health warning: {alert.message}")
+        else:
+            logger.info(f"Health info: {alert.message}")
+    
+    async def get_health_status(self) -> Optional[Dict[str, Any]]:
+        """Get current health status."""
+        if not self.health_monitor:
+            return None
+        
+        health_stats = await self.health_monitor.check_health()
+        return {
+            'status': health_stats.status.value,
+            'uptime': health_stats.uptime_seconds,
+            'message_rate': health_stats.message_rate_per_second,
+            'error_rate': health_stats.error_rate,
+            'reconnects': health_stats.reconnect_count,
+            'latency_ms': health_stats.latency_ms,
+            'alerts': len(health_stats.alerts),
+            'connection_id': self.connection_id
+        }
+    
+    def get_deduplication_stats(self) -> Optional[Dict[str, Any]]:
+        """Get deduplication statistics."""
+        if not self.deduplicator:
+            return None
+        
+        return self.deduplicator.get_statistics()
     
     # Context manager support
     
@@ -693,7 +873,8 @@ class SchwabWebSocketClient:
 @asynccontextmanager
 async def create_websocket_client(
     stream_processor: StreamProcessor,
-    account_id: str
+    account_id: str,
+    **kwargs
 ) -> SchwabWebSocketClient:
     """
     Create and manage a WebSocket client as a context manager.
@@ -701,11 +882,12 @@ async def create_websocket_client(
     Args:
         stream_processor: Stream processor for handling ticks
         account_id: Schwab account ID
+        **kwargs: Additional arguments for WebSocket client
         
     Yields:
         Connected WebSocket client
     """
-    client = SchwabWebSocketClient(stream_processor, account_id)
+    client = SchwabWebSocketClient(stream_processor, account_id, **kwargs)
     
     try:
         await client.connect()

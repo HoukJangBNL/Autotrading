@@ -87,6 +87,11 @@ class TestTokenStore:
                     
     def test_save_token_success(self, token_store, valid_token_data, mock_db):
         """Test successful token save."""
+        # Mock the database query result for checking existing token
+        mock_result = Mock()
+        mock_result.first.return_value = None  # No existing token
+        mock_db.execute.return_value = mock_result
+        
         with patch('src.auth.token_store.keyring.set_password') as mock_keyring:
             with patch('src.auth.token_store.get_db', return_value=iter([mock_db])):
                 # Execute
@@ -268,3 +273,54 @@ class TestTokenStore:
             with patch('builtins.open', side_effect=Exception("File error")):
                 loaded = token_store.load_from_file()
                 assert loaded is None
+    
+    def test_load_token_general_exception(self, token_store):
+        """Test load_token with general exception."""
+        with patch('src.auth.token_store.keyring.get_password', side_effect=Exception("General error")):
+            loaded = token_store.load_token()
+            assert loaded is None
+    
+    def test_load_from_database_exception(self, token_store, mock_db):
+        """Test database load with exception."""
+        mock_db.execute.side_effect = Exception("DB error")
+        
+        with patch('src.auth.token_store.get_db', return_value=iter([mock_db])):
+            result = token_store._load_from_database()
+            assert result is None
+            mock_db.close.assert_called_once()
+    
+    def test_is_token_valid_exception(self, token_store):
+        """Test token validation with parsing exception."""
+        invalid_token = {
+            'expires_at': 'invalid-date-format'
+        }
+        assert token_store.is_token_valid(invalid_token) is False
+    
+    def test_delete_token_keyring_exception(self, token_store, mock_db):
+        """Test token deletion with keyring exception."""
+        with patch('src.auth.token_store.keyring.delete_password', side_effect=Exception("Keyring error")):
+            with patch('src.auth.token_store.get_db', return_value=iter([mock_db])):
+                # Should not raise, just log warning
+                token_store.delete_token()
+                # Should still try to delete from database
+                mock_db.execute.assert_called()
+                mock_db.commit.assert_called_once()
+    
+    def test_delete_token_database_exception(self, token_store, mock_db):
+        """Test token deletion with database exception."""
+        mock_db.execute.side_effect = Exception("DB error")
+        
+        with patch('src.auth.token_store.keyring.delete_password') as mock_delete:
+            with patch('src.auth.token_store.get_db', return_value=iter([mock_db])):
+                # Should not raise, just log warnings
+                token_store.delete_token()
+                # Should have tried keyring delete first
+                mock_delete.assert_called_once()
+    
+    def test_get_token_age_invalid_date(self, token_store):
+        """Test get_token_age with invalid date format."""
+        token_data = {
+            'saved_at': 'not-a-valid-date'
+        }
+        age = token_store.get_token_age(token_data)
+        assert age is None

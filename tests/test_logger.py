@@ -16,7 +16,7 @@ class TestLoggerSetup:
         """Test default logging setup."""
         setup_logging()
         logger = get_logger("test")
-        assert logger.level == logging.INFO
+        assert logger.getEffectiveLevel() == logging.INFO
     
     def test_setup_logging_custom_config(self):
         """Test logging setup with custom configuration."""
@@ -30,7 +30,7 @@ class TestLoggerSetup:
             setup_logging(config)
             
             logger = get_logger("test_custom")
-            assert logger.level == logging.DEBUG
+            assert logger.getEffectiveLevel() == logging.DEBUG
             
             # Check that log file was created
             log_files = list(Path(temp_dir).glob("*.log"))

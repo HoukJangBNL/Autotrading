@@ -307,31 +307,6 @@ class HistoricalDataFetcher:
             )
             
             await session.execute(stmt)
-            
-            
-            if existing.scalar():
-                # Update existing record
-                await session.execute(
-                    text("""
-                        UPDATE price_data 
-                        SET open = :open, high = :high, low = :low, 
-                            close = :close, volume = :volume, vwap = :vwap,
-                            updated_at = :updated_at
-                        WHERE symbol = :symbol AND timestamp = :timestamp
-                    """),
-                    {**record, 'updated_at': datetime.now(timezone.utc)}
-                )
-            else:
-                # Insert new record
-                await session.execute(
-                    text("""
-                        INSERT INTO price_data 
-                        (symbol, timestamp, open, high, low, close, volume, vwap, created_at)
-                        VALUES 
-                        (:symbol, :timestamp, :open, :high, :low, :close, :volume, :vwap, :created_at)
-                    """),
-                    {**record, 'created_at': datetime.now(timezone.utc)}
-                )
                 
     async def fetch_multiple_symbols(
         self,

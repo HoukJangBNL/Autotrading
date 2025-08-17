@@ -74,8 +74,8 @@ class SchwabBroker:
     RETRY_STATUSES = {429, 502, 503, 504}
     NO_RETRY_STATUSES = {400, 401, 403, 404}
     
-    def __new__(cls) -> 'SchwabBroker':
-        """Ensure singleton instance."""
+    def __new__(cls, *args, **kwargs) -> 'SchwabBroker':
+        """Ensure singleton instance with test support."""
         if not cls._instance:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -166,6 +166,13 @@ class SchwabBroker:
             finally:
                 # Clear initializing flag
                 self._initializing = False
+    
+    @classmethod
+    def reset_instance(cls):
+        """Reset singleton for testing."""
+        cls._instance = None
+        cls._initialized = False
+        logger.debug("SchwabBroker singleton reset for testing")
     
     async def _load_account_numbers(self):
         """Load and cache account numbers with their hash values."""
