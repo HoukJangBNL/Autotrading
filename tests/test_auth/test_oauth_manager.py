@@ -158,10 +158,11 @@ class TestOAuthManager:
                 assert client == mock_client
                 mock_easy_client.assert_called_once_with(
                     api_key=mock_settings.schwab.api_key,
-                    redirect_uri=mock_settings.schwab.callback_url,
+                    app_secret=mock_settings.schwab.app_secret,
+                    callback_url=mock_settings.schwab.callback_url,  # Changed from redirect_uri
                     token_path=str(mock_token_store.get_token_file_path()),
                     asyncio=True,
-                    app_secret=mock_settings.schwab.app_secret
+                    enforce_enums=True  # Added this parameter
                 )
                 mock_save.assert_called_once_with(mock_client)
                 
@@ -178,7 +179,8 @@ class TestOAuthManager:
     async def test_create_client_from_token(self, oauth_manager, mock_settings, mock_token_store, valid_token_data):
         """Test creating client from saved token."""
         # Setup
-        mock_client = AsyncMock()
+        mock_client = Mock()  # Use regular Mock for synchronous attributes
+        mock_client._token = valid_token_data  # Set _token as a regular attribute
         
         with patch('src.auth.oauth_manager.auth.client_from_token_file', return_value=mock_client) as mock_from_file:
             # Execute
@@ -191,7 +193,8 @@ class TestOAuthManager:
                 token_path=str(mock_token_store.get_token_file_path()),
                 api_key=mock_settings.schwab.api_key,
                 app_secret=mock_settings.schwab.app_secret,
-                asyncio=True
+                asyncio=True,
+                enforce_enums=True  # Added this parameter
             )
             
     @pytest.mark.asyncio
@@ -251,30 +254,63 @@ class TestOAuthManager:
             await oauth_manager._test_client()
             
     @pytest.mark.asyncio
-    async def test_refresh_token_success(self, oauth_manager, mock_token_store):
+    async def test_refresh_token_success(self, oauth_manager, mock_token_store, valid_token_data):
         """Test successful token refresh."""
         # Setup
         mock_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.json.return_value = [{'accountNumber': '12345678'}]
-        mock_response.raise_for_status = Mock()
-        mock_client.get_account_numbers.return_value = mock_response
-        
         oauth_manager.client = mock_client
         
-        with patch.object(oauth_manager, '_save_client_token') as mock_save:
-            # Execute
-            await oauth_manager.refresh_token()
-            
-            # Verify
-            mock_client.get_account_numbers.assert_called_once()
-            mock_save.assert_called_once_with(mock_client)
+        # Mock token store to return valid token with refresh token
+        mock_token_store.load_token.return_value = valid_token_data
+        
+        # Mock the HTTP response for token refresh
+        mock_http_response = Mock()
+        mock_http_response.status_code = 200
+        mock_http_response.json.return_value = {
+            'access_token': 'new_access_token',
+            'refresh_token': 'new_refresh_token',
+            'expires_in': 518400,
+            'token_type': 'Bearer'
+        }
+        mock_http_response.raise_for_status = Mock()
+        
+        mock_http_client = AsyncMock()
+        mock_http_client.post.return_value = mock_http_response
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        
+        with patch('src.auth.oauth_manager.httpx.AsyncClient', return_value=mock_http_client):
+            with patch.object(oauth_manager, '_save_client_token') as mock_save:
+                # Execute
+                await oauth_manager.refresh_token()
+                
+                # Verify HTTP request was made correctly
+                mock_http_client.post.assert_called_once_with(
+                    oauth_manager.TOKEN_URL,
+                    data={
+                        'grant_type': 'refresh_token',
+                        'refresh_token': valid_token_data['refresh_token'],
+                        'client_id': oauth_manager.settings.schwab.api_key,
+                        'client_secret': oauth_manager.settings.schwab.app_secret
+                    },
+                    headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                    timeout=30.0
+                )
+                
+                # Verify token was saved
+                mock_token_store.save_token.assert_called_once()
+                saved_token = mock_token_store.save_token.call_args[0][0]
+                assert saved_token['access_token'] == 'new_access_token'
+                assert 'expires_at' in saved_token
             
     @pytest.mark.asyncio
-    async def test_refresh_token_no_client(self, oauth_manager):
-        """Test token refresh with no client."""
+    async def test_refresh_token_no_token(self, oauth_manager, mock_token_store):
+        """Test token refresh with no refresh token available."""
+        # Setup - mock token store to return None
+        mock_token_store.load_token.return_value = None
+        
         # Execute & Verify
-        with pytest.raises(RuntimeError, match="No client initialized"):
+        with pytest.raises(RuntimeError, match="Token refresh failed: No refresh token available"):
             await oauth_manager.refresh_token()
             
     def test_get_client(self, oauth_manager):

@@ -3,7 +3,10 @@
 import asyncio
 import os
 import sys
+import tempfile
+import time
 from pathlib import Path
+from unittest.mock import Mock, AsyncMock
 
 import pytest
 from sqlalchemy import create_engine
@@ -32,11 +35,12 @@ def event_loop():
 
 @pytest.fixture(scope="session")
 def test_database_url():
-    """Get test database URL."""
-    return os.environ.get(
-        "TEST_DATABASE_URL",
-        "postgresql://test_user:test_password@localhost/test_trading"
-    )
+    """Get test database URL based on environment."""
+    # Check if we should use PostgreSQL (for integration tests)
+    if os.getenv("TEST_USE_POSTGRES", "false").lower() == "true":
+        return "postgresql://test:test@localhost:5433/test_autotrading"
+    # Default to SQLite for unit tests (in-memory)
+    return "sqlite:///:memory:"
 
 
 @pytest.fixture(scope="function")
@@ -115,11 +119,16 @@ def reset_singletons():
     import src.data.historical_data
     src.data.historical_data._fetcher_instance = None
     
+    # Reset SchwabBroker singleton
+    from src.broker import SchwabBroker
+    SchwabBroker.reset_instance()
+    
     yield
     
     # Cleanup after test
     src.auth.auth_service._auth_instance = None
     src.data.historical_data._fetcher_instance = None
+    SchwabBroker.reset_instance()
 
 
 @pytest.fixture
@@ -133,3 +142,80 @@ def sample_order():
         "price": 150.00,
         "timeInForce": "DAY"
     }
+
+
+# Temporary directory fixtures
+@pytest.fixture
+def temp_dir():
+    """Create a temporary directory for tests."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield Path(tmpdir)
+
+
+@pytest.fixture
+def temp_log_dir(temp_dir):
+    """Create temporary log directory."""
+    log_dir = temp_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
+    return log_dir
+
+
+# Enhanced mock fixtures
+@pytest.fixture
+def mock_auth_service():
+    """Create standard mock auth service."""
+    auth = AsyncMock()
+    auth.initialize = AsyncMock()
+    auth.ensure_authenticated = AsyncMock()
+    auth.get_client = Mock()
+    auth.is_initialized = Mock(return_value=True)
+    auth.has_valid_client = Mock(return_value=True)
+    return auth
+
+
+@pytest.fixture
+def mock_redis():
+    """Create mock Redis client."""
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock(return_value=True)
+    redis.delete = AsyncMock(return_value=1)
+    redis.exists = AsyncMock(return_value=0)
+    redis.expire = AsyncMock(return_value=True)
+    redis.publish = AsyncMock(return_value=1)
+    redis.subscribe = AsyncMock()
+    redis.unsubscribe = AsyncMock()
+    redis.close = AsyncMock()
+    return redis
+
+
+# Docker services for integration tests
+@pytest.fixture(scope="session")
+def docker_services():
+    """Ensure docker services are running for integration tests."""
+    if os.getenv("TEST_USE_POSTGRES", "false").lower() == "true":
+        # Check if PostgreSQL is already running
+        try:
+            import psycopg2
+            conn = psycopg2.connect(
+                host="localhost",
+                port=5433,
+                database="test_autotrading",
+                user="test",
+                password="test"
+            )
+            conn.close()
+            yield  # Already running
+            return
+        except:
+            pass
+        
+        # Start PostgreSQL container
+        os.system("docker-compose -f docker-compose.test.yml up -d test-db")
+        time.sleep(5)  # Wait for PostgreSQL to start
+        
+        yield
+        
+        # Stop container if we started it
+        if os.getenv("TEST_KEEP_DOCKER", "false").lower() != "true":
+            os.system("docker-compose -f docker-compose.test.yml down")

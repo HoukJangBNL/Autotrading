@@ -6,6 +6,8 @@ from .models import (
     AccountSummary, MarketData, Alert
 )
 from .quote_service import Quote, QuoteHistory, QuoteService, create_quote_service
+from .historical_data import HistoricalDataFetcher, TimeFrame, get_historical_fetcher
+from .stream_processor import StreamProcessor, Tick, OHLCV, VolumeProfile, create_stream_processor
 
 __all__ = [
     # Database
@@ -30,4 +32,16 @@ __all__ = [
     'QuoteHistory',
     'QuoteService',
     'create_quote_service',
+    
+    # Historical Data
+    'HistoricalDataFetcher',
+    'TimeFrame',
+    'get_historical_fetcher',
+    
+    # Stream Processing
+    'StreamProcessor',
+    'Tick',
+    'OHLCV',
+    'VolumeProfile',
+    'create_stream_processor',
 ]

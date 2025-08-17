@@ -57,16 +57,19 @@ class TestTokenStore:
     
     def test_init_encryption_new_key(self, mock_settings):
         """Test encryption initialization with new key."""
+        # Generate a valid Fernet key for testing
+        test_key = Fernet.generate_key()
+        
         with patch('src.auth.token_store.get_settings', return_value=mock_settings):
             with patch('src.auth.token_store.keyring.get_password', return_value=None) as mock_get:
                 with patch('src.auth.token_store.keyring.set_password') as mock_set:
                     with patch('src.auth.token_store.Fernet.generate_key') as mock_gen:
-                        mock_gen.return_value = b'test_key_123'
+                        mock_gen.return_value = test_key
                         
                         store = TokenStore()
                         
                         mock_get.assert_called_with('schwab_autotrader', 'encryption_key')
-                        mock_set.assert_called_with('schwab_autotrader', 'encryption_key', 'test_key_123')
+                        mock_set.assert_called_with('schwab_autotrader', 'encryption_key', test_key.decode())
                         assert store.cipher is not None
                         
     def test_init_encryption_existing_key(self, mock_settings):

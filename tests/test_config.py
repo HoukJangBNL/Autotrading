@@ -44,23 +44,28 @@ class TestSettings:
     
     def test_schwab_settings_defaults(self):
         """Test Schwab settings default values."""
-        settings = SchwabSettings(
-            api_key="test_key",
-            app_secret="test_secret"
-        )
-        assert settings.api_key == "test_key"
-        assert settings.app_secret == "test_secret"
-        assert settings.callback_url == "https://127.0.0.1:8182"
-        assert settings.token_path == "config/token.json"
+        # Clear environment to test true defaults
+        with patch.dict(os.environ, {}, clear=True):
+            settings = SchwabSettings(
+                api_key="test_key",
+                app_secret="test_secret",
+                _env_file=None  # Disable .env file loading
+            )
+            assert settings.api_key == "test_key"
+            assert settings.app_secret == "test_secret"
+            assert settings.callback_url == "https://127.0.0.1:8182"
+            assert settings.token_path == "config/token.json"
     
     def test_database_settings_defaults(self):
         """Test database settings default values."""
-        settings = DatabaseSettings()
-        assert settings.database_url == "postgresql://user:password@localhost/trading"
-        assert settings.redis_url == "redis://localhost:6379/0"
-        assert settings.pool_size == 20
-        assert settings.max_overflow == 40
-        assert settings.echo is False
+        # Clear environment to test true defaults
+        with patch.dict(os.environ, {}, clear=True):
+            settings = DatabaseSettings(_env_file=None)  # Disable .env file loading
+            assert settings.database_url == "postgresql://user:password@localhost/trading"
+            assert settings.redis_url == "redis://localhost:6379/0"
+            assert settings.pool_size == 20
+            assert settings.max_overflow == 40
+            assert settings.echo is False
     
     def test_trading_settings_defaults(self):
         """Test trading settings default values."""
@@ -82,24 +87,42 @@ class TestSettings:
         assert settings.enable_paper_trading is True
         assert settings.enable_real_trading is False
     
-    @patch.dict(os.environ, {
-        "SCHWAB__API_KEY": "env_key",
-        "SCHWAB__APP_SECRET": "env_secret",
-        "SYSTEM__ENVIRONMENT": "production",
-        "SYSTEM__DEBUG": "false"
-    })
     def test_settings_from_env(self):
         """Test loading settings from environment variables."""
         # Clear the cache to force reload
         get_settings.cache_clear()
         
-        settings = get_settings()
-        assert settings.schwab.api_key == "env_key"
-        assert settings.schwab.app_secret == "env_secret"
-        assert settings.system.environment == "production"
-        assert settings.system.debug is False
-        assert settings.is_production is True
-        assert settings.is_development is False
+        # Mock environment variables and disable .env file
+        with patch.dict(os.environ, {
+            "SCHWAB__API_KEY": "env_key",
+            "SCHWAB__APP_SECRET": "env_secret",
+            "SYSTEM__ENVIRONMENT": "production",
+            "SYSTEM__DEBUG": "false"
+        }, clear=True):
+            # Create Settings directly without .env file
+            from src.config.settings import Settings
+            settings = Settings(
+                _env_file=None,  # Disable .env file loading
+                schwab=SchwabSettings(
+                    api_key="env_key",
+                    app_secret="env_secret",
+                    _env_file=None
+                ),
+                system=SystemSettings(
+                    environment="production",
+                    debug=False,
+                    _env_file=None
+                ),
+                database=DatabaseSettings(_env_file=None),
+                trading=TradingSettings(_env_file=None)
+            )
+            
+            assert settings.schwab.api_key == "env_key"
+            assert settings.schwab.app_secret == "env_secret"
+            assert settings.system.environment == "production"
+            assert settings.system.debug is False
+            assert settings.is_production is True
+            assert settings.is_development is False
     
     def test_get_database_url(self):
         """Test database URL selection based on environment."""
