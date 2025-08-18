@@ -13,7 +13,8 @@ from typing import Dict, List, Optional, Any, Set
 from enum import Enum
 import pytz
 
-from .order import Order, OrderSide, OrderType
+from .order import OrderSide, OrderType
+from .event_sourced_order import OrderAggregate
 from ...utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -176,7 +177,7 @@ class PreTradeRiskValidator:
         
         logger.info("Risk validator initialized with config")
     
-    async def validate_order(self, order: Order) -> ValidationResult:
+    async def validate_order(self, order: OrderAggregate) -> ValidationResult:
         """
         Perform all pre-trade risk checks on an order.
         
@@ -238,13 +239,13 @@ class PreTradeRiskValidator:
         
         # Log validation result
         if passed:
-            logger.info(f"Order {order.order_id} passed all risk checks")
+            logger.info(f"Order {order.id} passed all risk checks")
         else:
-            logger.warning(f"Order {order.order_id} failed risk checks: {result.get_failure_reasons()}")
+            logger.warning(f"Order {order.id} failed risk checks: {result.get_failure_reasons()}")
         
         return result
     
-    async def check_position_limits(self, order: Order) -> RiskCheckResult:
+    async def check_position_limits(self, order: OrderAggregate) -> RiskCheckResult:
         """Check position size limits."""
         if not self.position_tracker:
             return RiskCheckResult(
@@ -324,7 +325,7 @@ class PreTradeRiskValidator:
                 reason=f"Position limit check error: {str(e)}"
             )
     
-    async def check_daily_loss_limit(self, order: Order) -> RiskCheckResult:
+    async def check_daily_loss_limit(self, order: OrderAggregate) -> RiskCheckResult:
         """Check daily loss limits."""
         if not self.position_tracker:
             return RiskCheckResult(
@@ -385,7 +386,7 @@ class PreTradeRiskValidator:
                 reason=f"Daily loss check error: {str(e)}"
             )
     
-    async def check_order_size_limits(self, order: Order) -> RiskCheckResult:
+    async def check_order_size_limits(self, order: OrderAggregate) -> RiskCheckResult:
         """Check order size limits."""
         # Check minimum size
         if order.quantity < self.config.min_order_size:
@@ -431,7 +432,7 @@ class PreTradeRiskValidator:
             metadata={'order_size': order.quantity}
         )
     
-    async def check_price_reasonability(self, order: Order) -> RiskCheckResult:
+    async def check_price_reasonability(self, order: OrderAggregate) -> RiskCheckResult:
         """Check if order price is reasonable compared to market."""
         # Skip for market orders
         if order.order_type == OrderType.MARKET:
@@ -483,7 +484,7 @@ class PreTradeRiskValidator:
             passed=True
         )
     
-    async def check_restricted_list(self, order: Order) -> RiskCheckResult:
+    async def check_restricted_list(self, order: OrderAggregate) -> RiskCheckResult:
         """Check if symbol is on restricted list."""
         if order.symbol in self.config.restricted_symbols:
             return RiskCheckResult(
@@ -498,7 +499,7 @@ class PreTradeRiskValidator:
             passed=True
         )
     
-    async def check_market_hours(self, order: Order) -> RiskCheckResult:
+    async def check_market_hours(self, order: OrderAggregate) -> RiskCheckResult:
         """Check if order is being placed during valid market hours."""
         now = datetime.now(self.market_tz)
         current_time = now.time()
@@ -543,7 +544,7 @@ class PreTradeRiskValidator:
             }
         )
     
-    async def check_buying_power(self, order: Order) -> RiskCheckResult:
+    async def check_buying_power(self, order: OrderAggregate) -> RiskCheckResult:
         """Check if account has sufficient buying power."""
         if not self.account_service:
             return RiskCheckResult(
@@ -618,7 +619,7 @@ class PreTradeRiskValidator:
                 reason=f"Buying power check error: {str(e)}"
             )
     
-    async def check_duplicate_order(self, order: Order) -> RiskCheckResult:
+    async def check_duplicate_order(self, order: OrderAggregate) -> RiskCheckResult:
         """Check for duplicate orders."""
         # This would typically check against recent orders
         # For now, always pass
@@ -627,7 +628,7 @@ class PreTradeRiskValidator:
             passed=True
         )
     
-    async def check_rate_limits(self, order: Order) -> RiskCheckResult:
+    async def check_rate_limits(self, order: OrderAggregate) -> RiskCheckResult:
         """Check order submission rate limits."""
         now = datetime.now(timezone.utc)
         

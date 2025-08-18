@@ -1,348 +1,396 @@
+#!/usr/bin/env python3
 """
-Example usage of the Order Management System.
+Example usage of the Order Management System with Event Sourcing and CQRS.
 
-This demonstrates how to use the OMS components together for order lifecycle management.
+This example demonstrates how to use the OMS components including:
+- Event-sourced order lifecycle management
+- Risk validation
+- Command and query operations
+- Event bus integration
+- Event store persistence
+
+Run this example to see the OMS in action with sample orders.
 """
 
 import asyncio
+import sys
+import os
+from pathlib import Path
 from decimal import Decimal
 from datetime import datetime, timezone
 
-from src.trader.order_management import (
-    Order, OrderState, OrderType, OrderSide, Fill,
-    OrderService, OrderStateMachine,
-    PreTradeRiskValidator, RiskConfig,
-    PositionTracker, CostBasisMethod
-)
-from src.utils.logger import setup_logging, get_logger
+# Add the src directory to Python path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-# Setup logging
-setup_logging()
+from trader.order_management.oms_application import OrderManagementApplication
+from trader.order_management.event_store import OrderEventStoreFactory
+from trader.order_management.risk_validator import PreTradeRiskValidator, RiskConfig
+from trader.order_management.order import OrderSide, OrderType
+from utils.logger import get_logger
+
 logger = get_logger(__name__)
 
 
-async def basic_order_example():
-    """Basic example of creating and processing an order."""
-    print("\n=== Basic Order Example ===")
+async def demo_oms_lifecycle():
+    """Demonstrate complete OMS order lifecycle."""
     
-    # Create OMS components
+    print("🚀 Starting OMS Event Sourcing Demo")
+    print("=" * 50)
+    
+    # Step 1: Create risk configuration
+    print("\n📋 Step 1: Setting up risk configuration...")
     risk_config = RiskConfig(
-        max_order_size=1000,
-        max_position_size=5000,
-        max_daily_loss=Decimal("10000"),
-        restricted_symbols={"BANNED", "RESTRICTED"}
-    )
-    
-    position_tracker = PositionTracker(
-        cost_basis_method=CostBasisMethod.FIFO
-    )
-    
-    risk_validator = PreTradeRiskValidator(
-        config=risk_config,
-        position_tracker=position_tracker
-    )
-    
-    order_service = OrderService(
-        risk_validator=risk_validator,
-        broker_client=None,  # Would be actual broker client
-        position_tracker=position_tracker
-    )
-    
-    # Create an order
-    order = await order_service.create_order(
-        symbol="AAPL",
-        side=OrderSide.BUY,
-        quantity=100,
-        order_type=OrderType.LIMIT,
-        limit_price=Decimal("150.00"),
-        account_id="DEMO123",
-        strategy_id="MOMENTUM_01"
-    )
-    
-    print(f"Created order: {order.order_id}")
-    print(f"  Symbol: {order.symbol}")
-    print(f"  Side: {order.side}")
-    print(f"  Quantity: {order.quantity}")
-    print(f"  Type: {order.order_type}")
-    print(f"  Limit Price: ${order.limit_price}")
-    print(f"  State: {order.state}")
-    
-    # Validate the order
-    validation_result = await order_service.validate_order(order.order_id)
-    print(f"\nValidation result: {'PASSED' if validation_result.passed else 'FAILED'}")
-    
-    if validation_result.passed:
-        print("  All risk checks passed")
-    else:
-        print(f"  Failed checks: {validation_result.get_failure_reasons()}")
-    
-    # Submit the order
-    if validation_result.passed:
-        success = await order_service.submit_order(order.order_id)
-        print(f"\nOrder submission: {'SUCCESS' if success else 'FAILED'}")
-        print(f"  State: {order.state}")
-        print(f"  Broker Order ID: {order.broker_order_id}")
-    
-    # Simulate a fill
-    print("\nSimulating order fill...")
-    await order_service.process_fill(
-        order_id=order.order_id,
-        fill_quantity=100,
-        fill_price=Decimal("149.95"),
-        commission=Decimal("0.65"),
-        fees=Decimal("0.01")
-    )
-    
-    print(f"  State: {order.state}")
-    print(f"  Filled Quantity: {order.filled_quantity}")
-    print(f"  Average Fill Price: ${order.average_fill_price}")
-    print(f"  Total Commission: ${order.total_commission}")
-    print(f"  Total Fees: ${order.total_fees}")
-    
-    # Check position
-    position = await position_tracker.get_position("AAPL")
-    if position:
-        print(f"\nPosition Update:")
-        print(f"  Symbol: {position.symbol}")
-        print(f"  Quantity: {position.quantity}")
-        print(f"  Average Cost: ${position.average_cost}")
-        print(f"  Total Commission: ${position.total_commission}")
-
-
-async def pnl_calculation_example():
-    """Example of P&L calculation with multiple trades."""
-    print("\n=== P&L Calculation Example ===")
-    
-    position_tracker = PositionTracker(
-        cost_basis_method=CostBasisMethod.FIFO
-    )
-    
-    # Trade 1: Buy 100 shares @ $150
-    buy_order1 = Order(
-        order_id="BUY1",
-        symbol="AAPL",
-        side=OrderSide.BUY,
-        quantity=100,
-        order_type=OrderType.MARKET
-    )
-    
-    fill1 = Fill(
-        fill_id="F1",
-        timestamp=datetime.now(timezone.utc),
-        quantity=100,
-        price=Decimal("150.00"),
-        commission=Decimal("1.00")
-    )
-    
-    await position_tracker.process_fill(buy_order1, fill1)
-    print("Trade 1: Bought 100 shares @ $150.00")
-    
-    # Trade 2: Buy 50 more shares @ $155
-    buy_order2 = Order(
-        order_id="BUY2",
-        symbol="AAPL",
-        side=OrderSide.BUY,
-        quantity=50,
-        order_type=OrderType.MARKET
-    )
-    
-    fill2 = Fill(
-        fill_id="F2",
-        timestamp=datetime.now(timezone.utc),
-        quantity=50,
-        price=Decimal("155.00"),
-        commission=Decimal("0.50")
-    )
-    
-    await position_tracker.process_fill(buy_order2, fill2)
-    print("Trade 2: Bought 50 shares @ $155.00")
-    
-    # Update market price for unrealized P&L
-    position = await position_tracker.get_position("AAPL")
-    position.update_market_price(Decimal("160.00"))
-    
-    print(f"\nPosition before sale:")
-    print(f"  Quantity: {position.quantity}")
-    print(f"  Average Cost: ${position.average_cost:.2f}")
-    print(f"  Market Value: ${position.market_value:.2f}")
-    print(f"  Unrealized P&L: ${position.unrealized_pnl:.2f}")
-    
-    # Trade 3: Sell 75 shares @ $160 (FIFO will sell 75 from first lot)
-    sell_order = Order(
-        order_id="SELL1",
-        symbol="AAPL",
-        side=OrderSide.SELL,
-        quantity=75,
-        order_type=OrderType.MARKET
-    )
-    
-    fill3 = Fill(
-        fill_id="F3",
-        timestamp=datetime.now(timezone.utc),
-        quantity=75,
-        price=Decimal("160.00"),
-        commission=Decimal("0.75")
-    )
-    
-    await position_tracker.process_fill(sell_order, fill3)
-    print("\nTrade 3: Sold 75 shares @ $160.00")
-    
-    # Final position
-    position = await position_tracker.get_position("AAPL")
-    print(f"\nFinal Position:")
-    print(f"  Quantity: {position.quantity}")
-    print(f"  Average Cost: ${position.average_cost:.2f}")
-    print(f"  Realized P&L: ${position.realized_pnl:.2f}")
-    print(f"  Unrealized P&L: ${position.unrealized_pnl:.2f}")
-    print(f"  Total P&L: ${position.total_pnl:.2f}")
-    print(f"  Net P&L (after commission): ${position.net_pnl:.2f}")
-    
-    # Show remaining lots
-    print(f"\nRemaining Lots (FIFO):")
-    for i, lot in enumerate(position.lots):
-        print(f"  Lot {i+1}: {lot.quantity} shares @ ${lot.cost_basis:.2f}")
-
-
-async def risk_validation_example():
-    """Example of risk validation scenarios."""
-    print("\n=== Risk Validation Example ===")
-    
-    # Create strict risk configuration
-    risk_config = RiskConfig(
-        max_order_size=500,
         max_position_size=1000,
-        max_order_value=Decimal("50000"),
-        price_deviation_percent=Decimal("0.02"),  # 2% max deviation
-        restricted_symbols={"TSLA", "GME", "AMC"}
+        max_order_size=500,
+        max_daily_loss=Decimal("1000"),
+        enable_market_hours_check=False,  # Disable for demo
+        restricted_symbols={"RESTRICTED_STOCK"}
     )
     
-    risk_validator = PreTradeRiskValidator(config=risk_config)
+    # Step 2: Initialize components
+    print("\n🔧 Step 2: Initializing OMS components...")
     
-    # Test various orders
-    test_orders = [
-        # Order 1: Valid order
-        Order(
-            symbol="AAPL",
-            side=OrderSide.BUY,
-            quantity=100,
-            order_type=OrderType.LIMIT,
-            limit_price=Decimal("150.00")
-        ),
-        
-        # Order 2: Exceeds max order size
-        Order(
-            symbol="AAPL",
-            side=OrderSide.BUY,
-            quantity=600,  # Exceeds 500
-            order_type=OrderType.MARKET
-        ),
-        
-        # Order 3: Restricted symbol
-        Order(
-            symbol="GME",
-            side=OrderSide.BUY,
-            quantity=100,
-            order_type=OrderType.MARKET
-        ),
-        
-        # Order 4: Exceeds order value
-        Order(
-            symbol="GOOGL",
-            side=OrderSide.BUY,
-            quantity=100,
-            order_type=OrderType.LIMIT,
-            limit_price=Decimal("2500.00")  # $250,000 exceeds $50,000 limit
-        ),
-    ]
+    # Create risk validator
+    risk_validator = PreTradeRiskValidator(risk_config)
     
-    for i, order in enumerate(test_orders, 1):
-        print(f"\nOrder {i}: {order.side} {order.quantity} {order.symbol}")
-        if order.order_type == OrderType.LIMIT:
-            print(f"  Limit Price: ${order.limit_price}")
+    # Create event store for testing
+    event_store = OrderEventStoreFactory.create_test_store()
+    
+    # Create OMS application
+    oms = OrderManagementApplication(
+        risk_validator=risk_validator,
+        event_store=event_store,
+        environment="test"
+    )
+    
+    # Step 3: Set up event listeners
+    print("\n📡 Step 3: Setting up event listeners...")
+    
+    async def on_order_event(event):
+        """Handle order events for demo purposes."""
+        event_type = type(event).__name__
+        print(f"   📢 Event: {event_type} for order {getattr(event, 'originator_id', 'unknown')}")
+    
+    oms.subscribe_to_events(on_order_event)
+    
+    print("✅ OMS initialization complete!")
+    
+    # Step 4: Create and process orders
+    print("\n📝 Step 4: Creating and processing orders...")
+    
+    # Example 1: Successful order workflow
+    print("\n🟢 Example 1: Successful order workflow")
+    print("-" * 40)
+    
+    try:
+        # Create order
+        result = await oms.create_order(
+            symbol="AAPL",
+            side="BUY",
+            quantity=100,
+            order_type="LIMIT",
+            limit_price=150.50,
+            account_id="DEMO_ACCOUNT",
+            strategy_id="DEMO_STRATEGY"
+        )
         
-        result = await risk_validator.validate_order(order)
-        print(f"  Result: {'PASSED' if result.passed else 'FAILED'}")
+        if result.success:
+            order_id = result.order_id
+            print(f"✅ Order created successfully: {order_id}")
+            
+            # Validate order
+            validation_result = await oms.validate_order(order_id)
+            print(f"🔍 Validation result: {'✅ PASSED' if validation_result.success else '❌ FAILED'}")
+            
+            if validation_result.success:
+                # Submit order
+                submit_result = await oms.submit_order(order_id)
+                print(f"📤 Submission result: {'✅ SUBMITTED' if submit_result.success else '❌ FAILED'}")
+                
+                if submit_result.success:
+                    # Simulate partial fill
+                    fill_result = await oms.process_fill(
+                        order_id=order_id,
+                        fill_quantity=50,
+                        fill_price=150.25,
+                        commission=Decimal("1.00")
+                    )
+                    print(f"📊 Partial fill: {'✅ PROCESSED' if fill_result.success else '❌ FAILED'}")
+                    
+                    # Complete the fill
+                    complete_fill_result = await oms.process_fill(
+                        order_id=order_id,
+                        fill_quantity=50,
+                        fill_price=150.30,
+                        commission=Decimal("1.00")
+                    )
+                    print(f"📊 Complete fill: {'✅ PROCESSED' if complete_fill_result.success else '❌ FAILED'}")
+                    
+                    # Get final order state
+                    final_order = await oms.get_order(order_id)
+                    if final_order:
+                        print(f"📈 Final order state: {final_order.state}")
+                        print(f"💰 Average fill price: ${final_order.average_fill_price}")
+                        print(f"📊 Total cost: ${final_order.total_cost}")
         
-        if not result.passed:
-            for check in result.get_failures():
-                print(f"    - {check.check_type.value}: {check.reason}")
+        else:
+            print(f"❌ Order creation failed: {result.message}")
+    
+    except Exception as e:
+        print(f"❌ Error in successful workflow: {e}")
+    
+    # Example 2: Risk validation failure
+    print("\n🟡 Example 2: Risk validation failure")
+    print("-" * 40)
+    
+    try:
+        # Create order that will fail risk checks (too large)
+        result = await oms.create_order(
+            symbol="TSLA",
+            side="BUY",
+            quantity=1000,  # Exceeds max_order_size of 500
+            order_type="MARKET",
+            account_id="DEMO_ACCOUNT",
+            strategy_id="DEMO_STRATEGY"
+        )
+        
+        if result.success:
+            order_id = result.order_id
+            print(f"✅ Order created: {order_id}")
+            
+            # This should fail validation
+            validation_result = await oms.validate_order(order_id)
+            print(f"🔍 Validation result: {'✅ PASSED' if validation_result.success else '❌ FAILED'}")
+            print(f"📝 Reason: {validation_result.message}")
+    
+    except Exception as e:
+        print(f"❌ Error in risk failure example: {e}")
+    
+    # Example 3: Restricted symbol
+    print("\n🔴 Example 3: Restricted symbol")
+    print("-" * 40)
+    
+    try:
+        result = await oms.create_order(
+            symbol="RESTRICTED_STOCK",
+            side="BUY", 
+            quantity=100,
+            order_type="MARKET",
+            account_id="DEMO_ACCOUNT",
+            strategy_id="DEMO_STRATEGY"
+        )
+        
+        if result.success:
+            order_id = result.order_id
+            validation_result = await oms.validate_order(order_id)
+            print(f"🔍 Validation result: {'✅ PASSED' if validation_result.success else '❌ FAILED'}")
+            print(f"📝 Reason: {validation_result.message}")
+    
+    except Exception as e:
+        print(f"❌ Error in restricted symbol example: {e}")
+    
+    # Example 4: Order cancellation
+    print("\n🟠 Example 4: Order cancellation")
+    print("-" * 40)
+    
+    try:
+        # Create and submit order
+        result = await oms.create_order(
+            symbol="MSFT",
+            side="SELL",
+            quantity=200,
+            order_type="LIMIT",
+            limit_price=300.00,
+            account_id="DEMO_ACCOUNT",
+            strategy_id="DEMO_STRATEGY"
+        )
+        
+        if result.success:
+            order_id = result.order_id
+            print(f"✅ Order created: {order_id}")
+            
+            # Validate and submit
+            validation_result = await oms.validate_order(order_id)
+            if validation_result.success:
+                submit_result = await oms.submit_order(order_id)
+                if submit_result.success:
+                    print("📤 Order submitted successfully")
+                    
+                    # Cancel the order
+                    cancel_result = await oms.cancel_order(
+                        order_id=order_id,
+                        reason="User requested cancellation",
+                        requested_by="demo_user"
+                    )
+                    print(f"🚫 Cancellation: {'✅ CANCELLED' if cancel_result.success else '❌ FAILED'}")
+    
+    except Exception as e:
+        print(f"❌ Error in cancellation example: {e}")
+    
+    # Step 5: Query operations
+    print("\n📊 Step 5: Query operations and statistics")
+    print("-" * 40)
+    
+    try:
+        # Get statistics
+        stats = await oms.get_order_statistics()
+        print(f"📈 Total orders: {stats.total_orders}")
+        print(f"✅ Completed orders: {stats.completed_orders}")
+        print(f"🚫 Cancelled orders: {stats.cancelled_orders}")
+        print(f"❌ Rejected orders: {stats.rejected_orders}")
+        
+        # Get system status
+        system_status = await oms.get_system_status()
+        print(f"🏥 System status: {system_status['status']}")
+        print(f"📊 Event subscribers: {system_status['event_subscribers']}")
+        
+        # Get real-time metrics
+        metrics = await oms.get_real_time_metrics()
+        print(f"📊 Active orders: {metrics.get('active_orders', 0)}")
+        print(f"📅 Orders today: {metrics.get('orders_today', 0)}")
+        
+        # Get event store health
+        event_store_health = await oms.get_event_store_health()
+        print(f"💾 Event store status: {event_store_health['status']}")
+        print(f"📚 Total events: {event_store_health.get('total_events', 0)}")
+        
+    except Exception as e:
+        print(f"❌ Error getting statistics: {e}")
+    
+    # Step 6: Event history demonstration
+    print("\n📜 Step 6: Event history")
+    print("-" * 40)
+    
+    try:
+        # Get all orders to find one with events
+        active_orders = await oms.get_active_orders()
+        completed_orders = await oms.list_orders()
+        
+        all_orders = active_orders + completed_orders
+        if all_orders:
+            sample_order = all_orders[0]
+            print(f"📖 Getting event history for order: {sample_order.order_id}")
+            
+            event_history = await oms.get_order_event_history(sample_order.order_id)
+            print(f"📚 Total events: {event_history.get('total_events', 0)}")
+            
+            for i, event in enumerate(event_history.get('events', [])[:3]):  # Show first 3 events
+                print(f"   {i+1}. {event['event_type']} (v{event['version']})")
+        else:
+            print("📭 No orders found to show event history")
+    
+    except Exception as e:
+        print(f"❌ Error getting event history: {e}")
+    
+    # Cleanup
+    print("\n🧹 Cleanup")
+    print("-" * 40)
+    
+    try:
+        await oms.close()
+        print("✅ OMS closed successfully")
+    except Exception as e:
+        print(f"❌ Error during cleanup: {e}")
+    
+    print("\n🎉 Demo completed!")
+    print("=" * 50)
 
 
-async def order_state_tracking_example():
-    """Example of tracking order state changes."""
-    print("\n=== Order State Tracking Example ===")
+async def demo_batch_operations():
+    """Demonstrate batch order operations."""
     
-    order = Order(
-        symbol="MSFT",
-        side=OrderSide.BUY,
-        quantity=50,
-        order_type=OrderType.LIMIT,
-        limit_price=Decimal("300.00")
+    print("\n🔄 Batch Operations Demo")
+    print("=" * 30)
+    
+    # Initialize OMS
+    risk_config = RiskConfig(enable_market_hours_check=False)
+    risk_validator = PreTradeRiskValidator(risk_config)
+    event_store = OrderEventStoreFactory.create_test_store()
+    
+    oms = OrderManagementApplication(
+        risk_validator=risk_validator,
+        event_store=event_store,
+        environment="test"
     )
     
-    # Track state changes
-    def on_state_change(order, event):
-        transition = order.state_history[-1] if order.state_history else None
-        if transition:
-            print(f"State changed: {transition.from_state} -> {transition.to_state}")
-            if transition.reason:
-                print(f"  Reason: {transition.reason}")
+    # Track events
+    event_count = 0
     
-    # Create state machine with callback
-    machine = OrderStateMachine(order, callbacks={'on_validated': on_state_change})
+    async def count_events(event):
+        nonlocal event_count
+        event_count += 1
     
-    # Simulate order lifecycle
-    print(f"Initial state: {order.state}")
+    oms.subscribe_to_events(count_events)
     
-    # Validate
-    order.risk_check_results = {'passed': True}
-    machine.validate()
+    # Create multiple orders
+    symbols = ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA"]
+    order_ids = []
     
-    # Submit
-    machine.submit()
+    print(f"📝 Creating {len(symbols)} orders...")
     
-    # Acknowledge
-    machine.set_metadata({'broker_order_id': 'BROKER-12345'})
-    machine.acknowledge()
+    for symbol in symbols:
+        result = await oms.create_and_submit_order(
+            symbol=symbol,
+            side="BUY",
+            quantity=100,
+            order_type="LIMIT",
+            limit_price=100.00,
+            auto_validate=True,
+            auto_submit=True,
+            account_id="BATCH_ACCOUNT",
+            strategy_id="BATCH_STRATEGY"
+        )
+        
+        if result["success"]:
+            order_ids.append(result["order_id"])
+            print(f"✅ {symbol}: {result['message']}")
+        else:
+            print(f"❌ {symbol}: {result['message']}")
     
-    # Partial fill
-    fill1 = Fill(
-        fill_id="PF1",
-        timestamp=datetime.now(timezone.utc),
-        quantity=30,
-        price=Decimal("299.95")
-    )
-    machine.set_metadata({'fill': fill1})
-    machine.partial_fill()
+    print(f"\n📊 Created {len(order_ids)} orders successfully")
+    print(f"📢 Generated {event_count} events")
     
-    # Final fill
-    fill2 = Fill(
-        fill_id="PF2",
-        timestamp=datetime.now(timezone.utc),
-        quantity=20,
-        price=Decimal("299.90")
-    )
-    machine.set_metadata({'fill': fill2})
-    machine.fill()
+    # Get statistics
+    stats = await oms.get_order_statistics()
+    print(f"📈 Total orders in system: {stats.total_orders}")
     
-    print(f"\nFinal state: {order.state}")
-    print(f"State history ({len(order.state_history)} transitions):")
-    for transition in order.state_history:
-        print(f"  {transition.from_state} -> {transition.to_state} at {transition.timestamp.strftime('%H:%M:%S')}")
+    await oms.close()
+    print("✅ Batch demo completed")
 
 
 async def main():
-    """Run all examples."""
-    print("Order Management System Examples")
-    print("================================")
+    """Run all demo scenarios."""
+    print("🎯 Order Management System - Event Sourcing Demo")
+    print("=" * 60)
+    print("This demo showcases the OMS with event sourcing and CQRS patterns.")
+    print("Features demonstrated:")
+    print("  • Event-sourced order aggregates")
+    print("  • CQRS command and query separation")
+    print("  • Risk validation engine")
+    print("  • Circuit breaker patterns")
+    print("  • Event bus for real-time updates")
+    print("  • Persistent event store")
+    print("=" * 60)
     
-    await basic_order_example()
-    await pnl_calculation_example()
-    await risk_validation_example()
-    await order_state_tracking_example()
+    try:
+        # Run main lifecycle demo
+        await demo_oms_lifecycle()
+        
+        # Run batch operations demo
+        await demo_batch_operations()
+        
+        print("\n🏆 All demos completed successfully!")
+        
+    except KeyboardInterrupt:
+        print("\n⚠️  Demo interrupted by user")
+    except Exception as e:
+        logger.error(f"Demo failed: {e}")
+        print(f"\n❌ Demo failed: {e}")
+        return 1
     
-    print("\n\nAll examples completed!")
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Run the demo
+    exit_code = asyncio.run(main())
