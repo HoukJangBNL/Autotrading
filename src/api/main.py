@@ -1,0 +1,251 @@
+"""Main FastAPI application for the trading system."""
+
+import time
+from fastapi import FastAPI, Request, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
+from src.config import settings
+from src.utils.logger import setup_logging, logger
+from src.api import routers
+from src.api.websocket import websocket_endpoint
+from src.auth import get_auth_service, AuthenticationError
+from src.data.database import db_service
+from src.services.data_service import DataService
+from src.services.strategy_service import StrategyService
+from src.services.trading_service import TradingService
+
+# Setup logging
+setup_logging()
+
+# Service instances
+data_service = DataService()
+strategy_service = StrategyService()
+trading_service = TradingService()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator:
+    """Application lifespan manager."""
+    # Startup
+    logger.info("Starting trading system API...")
+    
+    try:
+        # Initialize database
+        db_service.initialize()
+        logger.info("Database initialized")
+        
+        # Initialize auth service
+        auth_service = get_auth_service()
+        await auth_service.initialize()
+        logger.info("Auth service initialized")
+        
+        # Initialize other services
+        await data_service.initialize()
+        await strategy_service.initialize()
+        await trading_service.initialize()
+        logger.info("All services initialized")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize services: {e}")
+        raise
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down trading system API...")
+    
+    try:
+        # Cleanup services
+        if auth_service.is_initialized():
+            await auth_service.shutdown()
+        
+        # Close database connections
+        db_service.close()
+        
+        logger.info("Cleanup completed")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+
+
+# Create FastAPI app
+app = FastAPI(
+    title="Personal Trading System",
+    description="Automated stock trading system with Schwab API integration",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json"
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all requests with timing."""
+    start_time = time.time()
+    
+    # Log request
+    logger.info(f"Request: {request.method} {request.url.path}")
+    
+    # Process request
+    response = await call_next(request)
+    
+    # Calculate processing time
+    process_time = time.time() - start_time
+    
+    # Add custom headers
+    response.headers["X-Process-Time"] = str(process_time)
+    response.headers["X-API-Version"] = "0.1.0"
+    
+    # Log response
+    logger.info(f"Response: {response.status_code} - {process_time:.3f}s")
+    
+    return response
+
+
+# Exception handlers
+@app.exception_handler(AuthenticationError)
+async def authentication_exception_handler(request: Request, exc: AuthenticationError):
+    """Handle authentication errors."""
+    logger.error(f"Authentication error: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={
+            "detail": str(exc),
+            "type": "authentication_error"
+        },
+        headers={"WWW-Authenticate": "Bearer"}
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions."""
+    logger.error(f"HTTP error {exc.status_code}: {exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "type": "http_error"
+        }
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors."""
+    logger.error(f"Validation error: {exc.errors()}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": exc.errors(),
+            "type": "validation_error",
+            "body": exc.body
+        }
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def starlette_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Handle Starlette HTTP exceptions."""
+    logger.error(f"Starlette HTTP error {exc.status_code}: {exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "type": "http_error"
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle all unhandled exceptions."""
+    logger.exception("Unhandled exception occurred")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": "Internal server error",
+            "type": "internal_error"
+        }
+    )
+
+
+# Health check endpoints
+@app.get("/health")
+async def health_check():
+    """Basic health check endpoint."""
+    return {
+        "status": "healthy",
+        "version": "0.1.0",
+        "service": "trading-system-api"
+    }
+
+
+@app.get("/health/detailed")
+async def detailed_health_check():
+    """Detailed health check with service status."""
+    health_status = {
+        "status": "healthy",
+        "version": "0.1.0",
+        "services": {
+            "database": "unknown",
+            "auth": "unknown",
+            "data_service": "unknown",
+            "strategy_service": "unknown",
+            "trading_service": "unknown"
+        },
+        "timestamp": time.time()
+    }
+    
+    # Check database
+    try:
+        with db_service.get_session() as session:
+            session.execute("SELECT 1")
+        health_status["services"]["database"] = "healthy"
+    except Exception as e:
+        health_status["services"]["database"] = f"unhealthy: {str(e)}"
+        health_status["status"] = "degraded"
+    
+    # Check auth service
+    try:
+        auth_service = get_auth_service()
+        if auth_service.is_initialized():
+            health_status["services"]["auth"] = "healthy"
+        else:
+            health_status["services"]["auth"] = "not_initialized"
+    except Exception as e:
+        health_status["services"]["auth"] = f"unhealthy: {str(e)}"
+        health_status["status"] = "degraded"
+    
+    # Check other services
+    health_status["services"]["data_service"] = "healthy" if data_service._initialized else "not_initialized"
+    health_status["services"]["strategy_service"] = "healthy" if strategy_service._initialized else "not_initialized"
+    health_status["services"]["trading_service"] = "healthy" if trading_service._initialized else "not_initialized"
+    
+    return health_status
+
+
+# Include API routers
+app.include_router(routers.auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(routers.data_router, prefix="/api/data", tags=["data"])
+app.include_router(routers.strategy_router, prefix="/api/strategies", tags=["strategies"])
+app.include_router(routers.trading_router, prefix="/api/trading", tags=["trading"])
+
+# Add WebSocket endpoint
+app.add_websocket_route("/ws", websocket_endpoint)
