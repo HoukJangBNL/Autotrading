@@ -27,5 +27,14 @@ docstring-parser==0.15
 fastapi==0.104.1
 uvicorn[standard]==0.24.0.post1
 
+# Task Queue and Caching
+celery[redis]==5.3.4
+# redis는 celery[redis]에 포함됨
+flower==2.0.1  # Celery monitoring
+
+# Data Processing
+numpy==1.24.4
+pandas==2.1.4
+
 # Development tools (move to requirements-dev.txt for production)
-ipython==8.19.0
+ipython>=8.0.0

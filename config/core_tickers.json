@@ -1,0 +1,46 @@
+{
+  "core_tickers": [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "BRK.B",
+    "JPM", "JNJ", "V", "PG", "UNH", "HD", "MA", "DIS",
+    "SPY", "QQQ", "IWM", "DIA", "VTI", "ARKK", "XLF", "XLK",
+    "AMD", "BAC", "F", "PLTR", "SOFI", "NIO", "AAL", "T",
+    "WMT", "XOM", "CVX", "PFE", "KO", "CSCO", "VZ", "INTC",
+    "NFLX", "ADBE", "CRM", "PYPL", "ORCL", "TMO", "ABT", "COST"
+  ],
+  "expansion_phases": {
+    "phase1": {
+      "name": "S&P 100 Components",
+      "target_count": 100,
+      "criteria": "S&P 100 index members"
+    },
+    "phase2": {
+      "name": "NASDAQ 100 Components",
+      "target_count": 200,
+      "criteria": "NASDAQ 100 index members not already included"
+    },
+    "phase3": {
+      "name": "High Volume Stocks",
+      "target_count": 300,
+      "criteria": "Average daily volume > 10M shares"
+    },
+    "phase4": {
+      "name": "Dynamic Discovery",
+      "target_count": 500,
+      "criteria": "Market movers, unusual activity, news catalysts"
+    }
+  },
+  "metadata": {
+    "last_updated": "2025-08-25",
+    "core_count": 48,
+    "categories": {
+      "mega_caps": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "BRK.B"],
+      "financials": ["JPM", "BAC", "V", "MA"],
+      "healthcare": ["JNJ", "UNH", "PFE", "TMO", "ABT"],
+      "etfs": ["SPY", "QQQ", "IWM", "DIA", "VTI", "ARKK", "XLF", "XLK"],
+      "high_volume": ["AMD", "F", "PLTR", "SOFI", "NIO", "AAL", "T"],
+      "consumer": ["WMT", "HD", "DIS", "KO", "COST", "PG"],
+      "energy": ["XOM", "CVX"],
+      "technology": ["INTC", "CSCO", "NFLX", "ADBE", "CRM", "PYPL", "ORCL"]
+    }
+  }
+}

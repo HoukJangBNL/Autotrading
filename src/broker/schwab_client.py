@@ -13,7 +13,7 @@ from httpx import Response
 # from schwab.orders import EquityInstruction, OrderType, Duration, Session
 # from schwab.orders.generic import OrderBuilder
 
-from ..auth.auth_service import get_auth_service
+# Avoid circular import - import get_auth_service only when needed
 from ..auth.exceptions import AuthenticationError
 from ..config.settings import get_settings
 from ..utils.logger import get_logger
@@ -129,6 +129,8 @@ class SchwabBroker:
             try:
                 # Initialize auth service if not provided
                 if not self.auth_service:
+                    # Import here to avoid circular import
+                    from ..auth.auth_service import get_auth_service
                     self.auth_service = get_auth_service()
                     await self.auth_service.initialize()
                 
@@ -718,28 +720,41 @@ class SchwabBroker:
         
         # Use the appropriate client method based on frequency
         if frequency_type == "minute" and frequency == 1:
-            response = await self.client.get_price_history_every_minute(
-                symbol=symbol,
-                start_datetime=start_date,
-                end_datetime=end_date,
-                need_extended_hours_data=need_extended_hours,
-                need_previous_close=need_previous_close
-            )
+            # Only pass dates if they are provided
+            kwargs = {
+                'symbol': symbol,
+                'need_extended_hours_data': need_extended_hours,
+                'need_previous_close': need_previous_close
+            }
+            if start_date is not None:
+                kwargs['start_datetime'] = start_date
+            if end_date is not None:
+                kwargs['end_datetime'] = end_date
+                
+            response = await self.client.get_price_history_every_minute(**kwargs)
         elif frequency_type == "minute" and frequency == 5:
-            response = await self.client.get_price_history_every_five_minutes(
-                symbol=symbol,
-                start_datetime=start_date,
-                end_datetime=end_date,
-                need_extended_hours_data=need_extended_hours,
-                need_previous_close=need_previous_close
-            )
+            kwargs = {
+                'symbol': symbol,
+                'need_extended_hours_data': need_extended_hours,
+                'need_previous_close': need_previous_close
+            }
+            if start_date is not None:
+                kwargs['start_datetime'] = start_date
+            if end_date is not None:
+                kwargs['end_datetime'] = end_date
+                
+            response = await self.client.get_price_history_every_five_minutes(**kwargs)
         elif frequency_type == "daily":
-            response = await self.client.get_price_history_every_day(
-                symbol=symbol,
-                start_datetime=start_date,
-                end_datetime=end_date,
-                need_previous_close=need_previous_close
-            )
+            kwargs = {
+                'symbol': symbol,
+                'need_previous_close': need_previous_close
+            }
+            if start_date is not None:
+                kwargs['start_datetime'] = start_date
+            if end_date is not None:
+                kwargs['end_datetime'] = end_date
+                
+            response = await self.client.get_price_history_every_day(**kwargs)
         else:
             # Fallback to generic method
             # This requires the schwab-py enums
@@ -800,6 +815,8 @@ class SchwabBroker:
         """
         Search for instruments.
         
+        This wraps the schwab-py get_instruments method.
+        
         Args:
             symbol: Symbol pattern to search
             projection: Search type (symbol-search, symbol-regex, desc-search, desc-regex, search, fundamental)
@@ -807,13 +824,204 @@ class SchwabBroker:
         Returns:
             Search results
         """
-        params = {
-            'symbol': symbol,
-            'projection': projection
-        }
+        if not self._initialized:
+            await self.initialize()
+            
+        logger.debug(f"Searching instruments: symbol={symbol}, projection={projection}")
         
-        response = await self._make_request("GET", "/instruments", params=params)
-        return response.json()
+        try:
+            # Map our projection values to schwab-py's Projection enum
+            from schwab.client import Client
+            
+            projection_map = {
+                'symbol-search': Client.Instrument.Projection.SYMBOL_SEARCH,
+                'symbol-regex': Client.Instrument.Projection.SYMBOL_REGEX,
+                'desc-search': Client.Instrument.Projection.DESCRIPTION_SEARCH,
+                'desc-regex': Client.Instrument.Projection.DESCRIPTION_REGEX,
+                'fundamental': Client.Instrument.Projection.FUNDAMENTAL,
+                'search': Client.Instrument.Projection.SEARCH
+            }
+            
+            # Get the enum value for projection
+            if projection not in projection_map:
+                logger.warning(f"Unknown projection: {projection}, defaulting to symbol-search")
+                projection_enum = Client.Instrument.Projection.SYMBOL_SEARCH
+            else:
+                projection_enum = projection_map[projection]
+            
+            # Call schwab-py's get_instruments
+            response = await self.client.get_instruments(symbol, projection_enum)
+            
+            # Check response status
+            if hasattr(response, 'raise_for_status'):
+                response.raise_for_status()
+            
+            # Extract JSON data
+            if hasattr(response, 'json'):
+                result = response.json()
+            else:
+                result = response
+                
+            logger.debug(f"search_instruments raw response: type={type(result)}, size={len(str(result))} chars")
+            
+            # Log structure without full data
+            if isinstance(result, dict):
+                logger.debug(f"Response is dict with keys: {list(result.keys())}")
+                # Log structure of first value if it exists
+                for key in list(result.keys())[:1]:
+                    value = result[key]
+                    if isinstance(value, dict):
+                        logger.debug(f"Value for key '{key}' is dict with keys: {list(value.keys())[:10]}")
+                    else:
+                        logger.debug(f"Value for key '{key}' is type: {type(value)}")
+            elif isinstance(result, list):
+                logger.debug(f"Response is list with {len(result)} items")
+                if result:
+                    logger.debug(f"First item type: {type(result[0])}")
+                    if isinstance(result[0], dict):
+                        logger.debug(f"First item keys: {list(result[0].keys())[:10]}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error searching instruments for {symbol}: {e}", exc_info=True)
+            return {}
+    
+    async def get_instruments(
+        self,
+        symbol: str,
+        projection: str = "fundamental"
+    ) -> Dict[str, Any]:
+        """
+        Get instruments data for a specific symbol.
+        
+        This is a wrapper around search_instruments for compatibility
+        with the discovery service that expects get_instruments.
+        
+        Args:
+            symbol: The symbol to get data for
+            projection: Type of data to return (fundamental, quote, etc.)
+            
+        Returns:
+            Dictionary with instruments data
+        """
+        try:
+            # Use search_instruments with symbol-search projection
+            result = await self.search_instruments(symbol, projection="symbol-search")
+            
+            logger.debug(f"search_instruments result for {symbol}: type={type(result)}, keys={list(result.keys()) if isinstance(result, dict) else 'not a dict'}")
+            
+            # Log first few items if it's a list
+            if isinstance(result, list) and result:
+                logger.debug(f"First item in result list: {result[0]}")
+            
+            # The schwab-py API might return different formats
+            # Check if it's already in the expected format
+            if isinstance(result, dict) and "instruments" in result:
+                logger.debug(f"Result already has 'instruments' key, returning as-is")
+                return result
+            
+            # If result is a dict with symbol as key
+            if isinstance(result, dict) and symbol.upper() in result:
+                logger.debug(f"Found symbol {symbol.upper()} in result, wrapping in instruments list")
+                return {"instruments": [result[symbol.upper()]]}
+            
+            # If result is a dict with lowercase symbol as key
+            if isinstance(result, dict) and symbol.lower() in result:
+                logger.debug(f"Found symbol {symbol.lower()} in result, wrapping in instruments list")
+                return {"instruments": [result[symbol.lower()]]}
+            
+            # If result is a list, assume it's a list of instruments
+            if isinstance(result, list):
+                logger.debug(f"Result is a list with {len(result)} items, wrapping in instruments dict")
+                return {"instruments": result}
+            
+            # If we have any result but couldn't match format, log it
+            if result:
+                logger.warning(f"Unexpected search_instruments format for {symbol}: {result}")
+            
+            return {"instruments": []}
+            
+        except Exception as e:
+            logger.error(f"Error in get_instruments for {symbol}: {e}", exc_info=True)
+            return {"instruments": []}
+    
+    async def get_movers(
+        self,
+        index: str,
+        direction: str = "up",
+        change: str = "percent"
+    ) -> List[Dict[str, Any]]:
+        """
+        Get market movers for an index.
+        
+        Args:
+            index: The index symbol (e.g., '$DJI', '$COMPX', '$SPX')
+            direction: Direction of movement ('up' or 'down') - NOT USED by schwab-py
+            change: Type of change ('percent' or 'volume') - NOT USED by schwab-py
+            
+        Returns:
+            List of mover dictionaries
+        """
+        if not self._initialized:
+            await self.initialize()
+            
+        try:
+            # Map index symbols to schwab-py's Index enum values
+            from schwab.client import Client
+            
+            index_map = {
+                '$DJI': Client.Movers.Index.DJI,
+                '$COMPX': Client.Movers.Index.COMPX,  # or NASDAQ
+                '$SPX': Client.Movers.Index.SPX,
+                'DJI': Client.Movers.Index.DJI,
+                'NASDAQ': Client.Movers.Index.NASDAQ,
+                'COMPX': Client.Movers.Index.COMPX,
+                'SPX': Client.Movers.Index.SPX,
+                'NYSE': Client.Movers.Index.NYSE,
+                'OTCBB': Client.Movers.Index.OTCBB
+            }
+            
+            # Get the enum value for the index
+            if index not in index_map:
+                logger.warning(f"Unknown index: {index}, defaulting to SP_500")
+                index_enum = Client.Movers.Index.SP_500
+            else:
+                index_enum = index_map[index]
+            
+            # Call the schwab-py client's get_movers with correct signature
+            # Note: schwab-py doesn't take direction/change parameters
+            response = await self.client.get_movers(index_enum)
+            
+            # Check if response has status code
+            if hasattr(response, 'raise_for_status'):
+                response.raise_for_status()
+            
+            # Extract the movers data
+            if hasattr(response, 'json'):
+                data = response.json()
+            else:
+                data = response
+            
+            logger.debug(f"Movers response type: {type(data)}")
+            
+            # The API might return different formats
+            if isinstance(data, list):
+                return data
+            elif isinstance(data, dict):
+                # Check various possible keys
+                for key in ['movers', 'screeners', 'items']:
+                    if key in data:
+                        return data[key]
+                # If no known key, return the dict values as list
+                return list(data.values())
+            else:
+                logger.warning(f"Unexpected movers response format: {type(data)}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Failed to get movers for {index}: {e}", exc_info=True)
+            return []
     
     async def close(self):
         """Close the client and cleanup resources."""
@@ -824,6 +1032,32 @@ class SchwabBroker:
             await self.auth_service.shutdown()
         
         logger.info("SchwabBroker closed")
+    
+    def get_price_history_sync(self, **kwargs) -> Optional[Dict[str, Any]]:
+        """
+        Synchronous version of get_price_history for use in Celery tasks.
+        
+        Args:
+            Same as get_price_history
+            
+        Returns:
+            Price history data
+        """
+        import asyncio
+        
+        # Use the existing event loop if available, or create a new one
+        try:
+            loop = asyncio.get_running_loop()
+            # If we're in an async context, just await
+            return asyncio.create_task(self.get_price_history(**kwargs))
+        except RuntimeError:
+            # No running loop, create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(self.get_price_history(**kwargs))
+            finally:
+                loop.close()
     
     # Context manager support
     
@@ -848,3 +1082,28 @@ async def get_schwab_broker() -> SchwabBroker:
     broker = SchwabBroker()
     await broker.initialize()
     return broker
+
+
+def get_schwab_broker_sync() -> SchwabBroker:
+    """
+    Get initialized SchwabBroker instance synchronously.
+    
+    This is useful for Celery tasks that need to run in sync context.
+    
+    Returns:
+        Initialized SchwabBroker
+    """
+    import asyncio
+    
+    broker = SchwabBroker()
+    
+    # Create a new event loop for sync context
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(broker.initialize())
+        return broker
+    except Exception:
+        loop.close()
+        raise

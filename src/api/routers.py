@@ -8,6 +8,7 @@ from datetime import datetime
 from src.auth import get_authenticated_client
 from src.utils.logger import logger
 from .dependencies import require_auth, get_db, get_async_db
+from src.tasks import data_mining, backtesting
 
 # Create routers
 auth_router = APIRouter()
@@ -38,6 +39,24 @@ class StrategyCreateRequest(BaseModel):
     parameters: Dict[str, Any] = {}
     
 
+class BacktestRequest(BaseModel):
+    """Backtest request parameters."""
+    strategy_id: str
+    symbols: List[str]
+    start_date: datetime
+    end_date: datetime
+    parameters: Optional[Dict[str, Any]] = None
+    
+
+class OptimizationRequest(BaseModel):
+    """Strategy optimization request."""
+    strategy_id: str
+    symbols: List[str]
+    start_date: datetime
+    end_date: datetime
+    parameter_ranges: Dict[str, Dict[str, Any]]
+    
+
 # Auth endpoints
 @auth_router.get("/status", response_model=AuthStatusResponse)
 async def auth_status(user: dict = Depends(require_auth)):
@@ -57,10 +76,42 @@ async def auth_status(user: dict = Depends(require_auth)):
 
 # Data endpoints
 @data_router.get("/tickers")
-async def get_tickers(user: dict = Depends(require_auth)):
+async def get_tickers(
+    user: dict = Depends(require_auth),
+    db: Any = Depends(get_async_db)
+):
     """Get list of available tickers."""
-    # Placeholder - will be implemented in Phase 2
-    return {"tickers": [], "message": "Ticker list placeholder"}
+    try:
+        from sqlalchemy import select
+        from src.data.models import Ticker
+        
+        result = await db.execute(
+            select(Ticker)
+            .where(Ticker.active == True)
+            .order_by(Ticker.tier, Ticker.symbol)
+        )
+        tickers = result.scalars().all()
+        
+        return {
+            "tickers": [
+                {
+                    "id": t.id,
+                    "symbol": t.symbol,
+                    "name": t.name,
+                    "tier": t.tier.value,
+                    "last_mined": t.last_mined.isoformat() if t.last_mined else None,
+                    "mining_status": t.mining_status.value if t.mining_status else None
+                }
+                for t in tickers
+            ],
+            "total": len(tickers)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get tickers: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get tickers: {str(e)}"
+        )
 
 
 @data_router.post("/mining/start")
@@ -69,17 +120,157 @@ async def start_data_mining(
     user: dict = Depends(require_auth)
 ):
     """Start data mining job."""
-    # Placeholder - will be implemented in Phase 2
     logger.info(f"User {user['username']} requested data mining for {len(request.symbols)} symbols")
-    return {
-        "job_id": "placeholder",
-        "status": "pending",
-        "symbols": request.symbols,
-        "date_range": {
-            "start": request.start_date.isoformat(),
-            "end": request.end_date.isoformat()
+    
+    try:
+        # Celery 태스크 호출
+        result = data_mining.mine_date_range.delay(
+            symbols=request.symbols,
+            start_date=request.start_date.strftime("%Y-%m-%d"),
+            end_date=request.end_date.strftime("%Y-%m-%d")
+        )
+        
+        return {
+            "job_id": result.id,
+            "status": "submitted",
+            "symbols": request.symbols,
+            "date_range": {
+                "start": request.start_date.isoformat(),
+                "end": request.end_date.isoformat()
+            },
+            "message": f"Data mining job submitted for {len(request.symbols)} symbols"
         }
-    }
+    except Exception as e:
+        logger.error(f"Failed to start data mining: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start data mining: {str(e)}"
+        )
+
+
+@data_router.post("/mining/daily")
+async def start_daily_mining(
+    user: dict = Depends(require_auth)
+):
+    """Start the daily mining process."""
+    logger.info(f"User {user['username']} started daily mining process")
+    
+    try:
+        # Start daily mining task
+        result = data_mining.start_daily_mining.delay()
+        
+        return {
+            "task_id": result.id,
+            "status": "submitted",
+            "message": "Daily mining process started"
+        }
+    except Exception as e:
+        logger.error(f"Failed to start daily mining: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start daily mining: {str(e)}"
+        )
+
+
+@data_router.post("/mining/check-gaps")
+async def check_data_gaps(
+    user: dict = Depends(require_auth)
+):
+    """Check and fill data gaps."""
+    logger.info(f"User {user['username']} triggered gap check")
+    
+    try:
+        # Start gap checking task
+        result = data_mining.check_and_fill_gaps.delay()
+        
+        return {
+            "task_id": result.id,
+            "status": "submitted",
+            "message": "Gap checking process started"
+        }
+    except Exception as e:
+        logger.error(f"Failed to start gap check: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start gap check: {str(e)}"
+        )
+
+
+@data_router.get("/candles/{symbol}")
+async def get_candles(
+    symbol: str,
+    limit: int = 100,
+    user: dict = Depends(require_auth),
+    db: Any = Depends(get_async_db)
+):
+    """Get candles for a specific symbol."""
+    try:
+        from sqlalchemy import select
+        from src.data.models import Candle, Ticker
+        
+        # Get ticker ID
+        result = await db.execute(
+            select(Ticker).where(Ticker.symbol == symbol)
+        )
+        ticker = result.scalar_one_or_none()
+        
+        if not ticker:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Ticker {symbol} not found"
+            )
+        
+        # Get candles
+        result = await db.execute(
+            select(Candle)
+            .where(Candle.ticker_id == ticker.id)
+            .order_by(Candle.timestamp.desc())
+            .limit(limit)
+        )
+        candles = result.scalars().all()
+        
+        return [
+            {
+                "timestamp": c.timestamp.isoformat(),
+                "open": float(c.open),
+                "high": float(c.high),
+                "low": float(c.low),
+                "close": float(c.close),
+                "volume": c.volume
+            }
+            for c in candles
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get candles: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get candles: {str(e)}"
+        )
+
+
+@data_router.get("/mining/summary")
+async def get_mining_summary(
+    user: dict = Depends(require_auth),
+    db: Any = Depends(get_async_db)
+):
+    """Get overall mining status summary."""
+    try:
+        from src.services.data_mining_service import DataMiningService
+        
+        service = DataMiningService()
+        await service.initialize()
+        
+        summary = await service.get_mining_status(db)
+        
+        return summary
+    except Exception as e:
+        logger.error(f"Failed to get mining summary: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get mining summary: {str(e)}"
+        )
 
 
 @data_router.get("/mining/status/{job_id}")
@@ -88,13 +279,20 @@ async def get_mining_status(
     user: dict = Depends(require_auth)
 ):
     """Check data mining job status."""
-    # Placeholder - will be implemented in Phase 2
-    return {
-        "job_id": job_id,
-        "status": "pending",
-        "progress": 0,
-        "message": "Mining status placeholder"
-    }
+    try:
+        # Celery 태스크 진행 상황 조회
+        result = data_mining.get_mining_progress.delay(job_id)
+        progress_info = result.get(timeout=5)  # 5초 타임아웃
+        
+        return progress_info
+    except Exception as e:
+        logger.error(f"Failed to get mining status: {e}")
+        return {
+            "job_id": job_id,
+            "status": "error",
+            "error": str(e),
+            "message": "Failed to get mining job status"
+        }
 
 
 # Strategy endpoints
@@ -184,3 +382,154 @@ async def get_pnl(user: dict = Depends(require_auth)):
         "unrealized_pnl": 0.0,
         "message": "P&L placeholder"
     }
+
+
+# Backtesting endpoints
+@strategy_router.post("/backtest")
+async def run_backtest(
+    request: BacktestRequest,
+    user: dict = Depends(require_auth)
+):
+    """Run backtest for a strategy."""
+    logger.info(f"User {user['username']} requested backtest for strategy {request.strategy_id}")
+    
+    try:
+        # Celery 태스크 호출
+        result = backtesting.run_backtest_task.delay(
+            strategy_id=request.strategy_id,
+            symbols=request.symbols,
+            start_date=request.start_date.strftime("%Y-%m-%d"),
+            end_date=request.end_date.strftime("%Y-%m-%d"),
+            parameters=request.parameters
+        )
+        
+        return {
+            "task_id": result.id,
+            "status": "submitted",
+            "strategy_id": request.strategy_id,
+            "message": "Backtest task submitted"
+        }
+    except Exception as e:
+        logger.error(f"Failed to start backtest: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start backtest: {str(e)}"
+        )
+
+
+@strategy_router.get("/backtest/{task_id}")
+async def get_backtest_result(
+    task_id: str,
+    user: dict = Depends(require_auth)
+):
+    """Get backtest task result."""
+    try:
+        from celery.result import AsyncResult
+        from src.tasks.celery_app import celery_app
+        
+        result = AsyncResult(task_id, app=celery_app)
+        
+        if result.ready():
+            if result.successful():
+                return result.get()
+            else:
+                return {
+                    "task_id": task_id,
+                    "status": "failed",
+                    "error": str(result.info)
+                }
+        else:
+            return {
+                "task_id": task_id,
+                "status": result.state,
+                "info": result.info if result.info else {}
+            }
+    except Exception as e:
+        logger.error(f"Failed to get backtest result: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get backtest result: {str(e)}"
+        )
+
+
+@strategy_router.post("/optimize")
+async def optimize_strategy(
+    request: OptimizationRequest,
+    user: dict = Depends(require_auth)
+):
+    """Optimize strategy parameters."""
+    logger.info(f"User {user['username']} requested optimization for strategy {request.strategy_id}")
+    
+    try:
+        # Celery 태스크 호출
+        result = backtesting.optimize_strategy.delay(
+            strategy_id=request.strategy_id,
+            symbols=request.symbols,
+            start_date=request.start_date.strftime("%Y-%m-%d"),
+            end_date=request.end_date.strftime("%Y-%m-%d"),
+            parameter_ranges=request.parameter_ranges
+        )
+        
+        return {
+            "task_id": result.id,
+            "status": "submitted",
+            "strategy_id": request.strategy_id,
+            "message": "Optimization task submitted"
+        }
+    except Exception as e:
+        logger.error(f"Failed to start optimization: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start optimization: {str(e)}"
+        )
+
+
+@strategy_router.post("/batch-backtest")
+async def batch_backtest(
+    strategy_ids: List[str],
+    symbols: List[str],
+    start_date: datetime,
+    end_date: datetime,
+    user: dict = Depends(require_auth)
+):
+    """Run batch backtest for multiple strategies."""
+    logger.info(f"User {user['username']} requested batch backtest for {len(strategy_ids)} strategies")
+    
+    try:
+        # Celery 태스크 호출
+        result = backtesting.batch_backtest.delay(
+            strategy_ids=strategy_ids,
+            symbols=symbols,
+            start_date=start_date.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d")
+        )
+        
+        return result.get(timeout=5)  # 빠른 응답을 위해 5초 타임아웃
+    except Exception as e:
+        logger.error(f"Failed to start batch backtest: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start batch backtest: {str(e)}"
+        )
+
+
+@strategy_router.get("/batch-backtest/{job_id}/progress")
+async def get_batch_backtest_progress(
+    job_id: str,
+    user: dict = Depends(require_auth)
+):
+    """Get batch backtest progress."""
+    try:
+        # Celery 태스크 진행 상황 조회
+        result = backtesting.get_backtest_progress.delay(job_id)
+        progress_info = result.get(timeout=5)  # 5초 타임아웃
+        
+        return progress_info
+    except Exception as e:
+        logger.error(f"Failed to get batch backtest progress: {e}")
+        return {
+            "job_id": job_id,
+            "status": "error",
+            "error": str(e),
+            "message": "Failed to get batch backtest progress"
+        }
