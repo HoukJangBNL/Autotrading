@@ -1,14 +1,26 @@
-"""Trading strategy module with pluggable strategy framework."""
+"""Trading strategy framework."""
 
-from .base import BaseStrategy, Signal
-from .momentum_breakout import MomentumBreakoutStrategy
-from .mean_reversion import MeanReversionStrategy
-from .optimizer import StrategyOptimizer
+from .base import BaseStrategy, StrategyState
+from .models import (
+    Signal,
+    Position,
+    Trade,
+    Order,
+    OrderSide,
+    OrderType,
+    OrderStatus,
+    SignalStrength
+)
 
 __all__ = [
-    'BaseStrategy', 
+    'BaseStrategy',
+    'StrategyState',
     'Signal',
-    'MomentumBreakoutStrategy',
-    'MeanReversionStrategy',
-    'StrategyOptimizer'
+    'Position', 
+    'Trade',
+    'Order',
+    'OrderSide',
+    'OrderType',
+    'OrderStatus',
+    'SignalStrength'
 ]

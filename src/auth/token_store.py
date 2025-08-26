@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from ..config.settings import get_settings
-from ..data.database import get_db
+# Avoid circular import - import get_db only when needed
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -85,6 +85,8 @@ class TokenStore:
             
     def _save_to_database(self, encrypted_token: str) -> None:
         """Save encrypted token to database."""
+        # Import here to avoid circular import
+        from ..data.database import get_db
         db = next(get_db())
         try:
             # Create table if not exists
@@ -147,6 +149,8 @@ class TokenStore:
             
     def _load_from_database(self) -> Optional[Dict[str, Any]]:
         """Load and decrypt token from database."""
+        # Import here to avoid circular import
+        from ..data.database import get_db
         db = next(get_db())
         try:
             result = db.execute(
@@ -215,6 +219,8 @@ class TokenStore:
             
         # Delete from database
         try:
+            # Import here to avoid circular import
+            from ..data.database import get_db
             db = next(get_db())
             db.execute(text("DELETE FROM auth_tokens"))
             db.commit()

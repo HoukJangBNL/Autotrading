@@ -185,3 +185,7 @@ class TradingLogger:
             f"Strategy signal: {strategy} - {action} {symbol} (confidence: {confidence:.2f})",
             extra=extra
         )
+
+
+# Create a default logger instance for module-level usage
+logger = get_logger(__name__)

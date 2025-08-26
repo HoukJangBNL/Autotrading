@@ -1,624 +1,642 @@
-# Charles Schwab Automated Trading System - Implementation Workflow v4
-## Architect's Strategic Update
+# Personal Stock Trading System Implementation Workflow V4
 
-## Executive Summary
+## Current State Analysis ✅
 
-### Overall Progress: 75% Complete (Phase 1: 100% Complete, GUI Foundation: 100% Complete, Phase 2 Backend: 80% Complete) ✅
+### Existing Foundation
+- **Authentication**: Robust OAuth2 with PKCE, automatic token refresh
+- **API Client**: Schwab API integration with rate limiting and circuit breaker
+- **Database**: PostgreSQL with SQLAlchemy ORM
+- **Configuration**: Pydantic settings management
+- **Testing**: Comprehensive test suite with pytest
+- **Development Tools**: Black, mypy, pylint, pre-commit hooks
 
-**Key Achievements**:
-- ✅ OAuth2 authentication with PKCE security fully operational
-- ✅ Schwab broker client with comprehensive API coverage implemented
-- ✅ Enhanced historical data fetcher with 8.21 symbols/sec throughput
-- ✅ Real-time quote service with Redis caching and batch processing
-- ✅ Stream Processor with tick processing and OHLCV aggregation
-- ✅ Robust error handling, rate limiting, and circuit breaker patterns
-- ✅ WebSocket streaming implementation with production-grade resilience
-- ✅ Comprehensive test coverage across all modules
-- ✅ **GUI Integration with Mock/Real Mode switching implemented**
-- ✅ **Discovery Mode fully operational with real-time market data**
-- ✅ **Backend-GUI bridge architecture established**
-- ✅ **Strategy Framework fully implemented with all core components**
-- ✅ **OMS-GUI Bridge operational with real-time WebSocket/REST communication**
-- ✅ **Live Trading Adapter with paper trading mode completed**
+### Gap Analysis
+- Missing: Real-time data streaming capability
+- Missing: Time-series data storage and management
+- Missing: Strategy framework and backtesting engine
+- Missing: Trade execution and order management
+- Missing: Web frontend and API server
+- Missing: Background task processing for data mining
 
-**Current Focus**: Phase 2b - GUI Mode Implementation (Selection & Trading Modes)
+## System Architecture
 
-**Next Milestone**: Complete Selection and Trading Mode GUI interfaces using implemented OMS-GUI Bridge
+### Technology Stack
 
-**Architect's Assessment**: Phase 1 foundation complete, ready for trading engine implementation
+#### Backend
+- **Framework**: FastAPI (async REST API + WebSocket support)
+- **Task Queue**: Celery with Redis broker
+- **Database**: 
+  - PostgreSQL for general data
+  - TimescaleDB extension for time-series data
+- **Streaming**: WebSocket client for Schwab streaming API
+- **Caching**: Redis for real-time data and session management
 
-## Test Results Summary (August 17, 2025)
+#### Frontend
+- **Framework**: React 18 with TypeScript
+- **State Management**: Redux Toolkit + RTK Query
+- **UI Components**: Ant Design or Material-UI
+- **Charts**: Recharts or Lightweight Charts
+- **Real-time**: Socket.io client for WebSocket
 
-### Overall Metrics
-- **Total Tests**: 366 (all passing)
-- **WebSocket Tests**: 22/22 passing (100%)
-- **Overall Coverage**: 33.07%
-- **WebSocket Coverage**: 75.73% (exceeds 70% requirement)
+#### Infrastructure
+- **Container**: Docker + Docker Compose
+- **Reverse Proxy**: Nginx
+- **Process Manager**: Supervisor or systemd
+- **Monitoring**: Prometheus + Grafana
+- **Logging**: ELK stack (optional)
 
-### WebSocket Implementation Status
-- ✅ Connection management with auto-reconnect
-- ✅ Authentication flow
-- ✅ Subscription/unsubscription handling
-- ✅ Message processing and deduplication
-- ✅ Health monitoring
-- ✅ State persistence
-- ✅ Error handling and recovery
+## Data Models
 
-## Phase 1: Complete Schwab API Integration (100% Complete) ✅
+### Core Models
 
-All Phase 1 components have been successfully implemented and tested:
+```python
+# src/data/models.py
 
-1. **OAuth2 Authentication** ✅
-   - PKCE flow implemented
-   - Token refresh automated
-   - Secure storage configured
+class Ticker(Base):
+    """Stock ticker information."""
+    __tablename__ = "tickers"
+    
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String(10), unique=True, nullable=False, index=True)
+    name = Column(String(255))
+    sector = Column(String(100))
+    industry = Column(String(100))
+    market_cap = Column(BigInteger)
+    active = Column(Boolean, default=True)
+    
+    # Relationships
+    candles = relationship("Candle", back_populates="ticker")
+    signals = relationship("Signal", back_populates="ticker")
 
-2. **Broker Client** ✅
-   - Full API coverage
-   - Rate limiting
-   - Circuit breakers
+class Candle(Base):
+    """1-minute OHLCV data (TimescaleDB hypertable)."""
+    __tablename__ = "candles"
+    __table_args__ = (
+        UniqueConstraint('ticker_id', 'timestamp', name='_ticker_timestamp_uc'),
+    )
+    
+    ticker_id = Column(Integer, ForeignKey("tickers.id"), nullable=False)
+    timestamp = Column(DateTime(timezone=True), nullable=False, primary_key=True)
+    open = Column(Numeric(10, 4), nullable=False)
+    high = Column(Numeric(10, 4), nullable=False)
+    low = Column(Numeric(10, 4), nullable=False)
+    close = Column(Numeric(10, 4), nullable=False)
+    volume = Column(BigInteger, nullable=False)
+    
+    # Indexes for TimescaleDB
+    __table_args__ = (
+        Index('idx_candles_ticker_timestamp', 'ticker_id', 'timestamp'),
+    )
+    
+    ticker = relationship("Ticker", back_populates="candles")
 
-3. **Historical Data Fetcher** ✅
-   - 8.21 symbols/sec throughput
-   - Parallel processing
-   - Error recovery
+class Strategy(Base):
+    """Trading strategy configuration."""
+    __tablename__ = "strategies"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False)
+    class_name = Column(String(100), nullable=False)
+    parameters = Column(JSON, default={})
+    active = Column(Boolean, default=False)
+    
+    # Performance metrics
+    total_trades = Column(Integer, default=0)
+    winning_trades = Column(Integer, default=0)
+    total_pnl = Column(Numeric(12, 2), default=0)
+    sharpe_ratio = Column(Numeric(6, 3))
+    max_drawdown = Column(Numeric(6, 3))
+    
+    # Relationships
+    signals = relationship("Signal", back_populates="strategy")
+    trades = relationship("Trade", back_populates="strategy")
 
-4. **Quote Service** ✅
-   - Redis caching
-   - Batch processing
-   - Real-time updates
+class Signal(Base):
+    """Trading signals generated by strategies."""
+    __tablename__ = "signals"
+    
+    id = Column(Integer, primary_key=True)
+    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=False)
+    ticker_id = Column(Integer, ForeignKey("tickers.id"), nullable=False)
+    timestamp = Column(DateTime(timezone=True), nullable=False)
+    signal_type = Column(Enum('BUY', 'SELL', 'HOLD'), nullable=False)
+    strength = Column(Numeric(3, 2))  # 0.00 to 1.00
+    metadata = Column(JSON, default={})
+    
+    # Relationships
+    strategy = relationship("Strategy", back_populates="signals")
+    ticker = relationship("Ticker", back_populates="signals")
 
-5. **Stream Processor** ✅
-   - Tick aggregation
-   - OHLCV generation
-   - Multi-timeframe support
-
-6. **WebSocket Streaming** ✅
-   - Resilient connection management
-   - Message deduplication
-   - Health monitoring
-   - State synchronization
-
-## Phase 1.5: GUI Foundation (100% Complete) ✅
-
-**Completion Date**: August 17, 2025
-
-7. **GUI Integration Architecture** ✅
-   - PySide6-based desktop application
-   - Mock/Real mode switching
-   - Backend service integration
-   - Event-driven communication
-
-8. **Discovery Mode Implementation** ✅
-   - Real-time market data display
-   - Volume spike detection
-   - Price breakout analysis
-   - Discovery alert system
-
-9. **Backend-GUI Bridge** ✅
-   - GUIService with dual-mode operation
-   - StreamingService integration
-   - Automatic fallback mechanisms
-   - Configuration-driven operation
-
-## Phase 2: Trading Engine Core with GUI Integration (80% Complete)
-
-**Architect's Updated Strategy**: Integrated approach combining backend trading engine with complete GUI implementation for end-to-end system validation.
-
-### 2.1 Order Management System (36 hours) - Enhanced Architecture
-
-**Starting Implementation**: August 18, 2025
-
-**Architectural Pattern**: Event-Driven with CQRS (Command Query Responsibility Segregation)
-
-1. **Event-Driven Order Management** (16 hours)
-   ```python
-   # src/trader/order_management.py
-   from enum import Enum
-   from typing import Dict, List, Optional
-   from datetime import datetime
-   import asyncio
-   from transitions import Machine
-   from dataclasses import dataclass
-   
-   @dataclass
-   class OrderEvent:
-       """Base class for all order events"""
-       order_id: str
-       timestamp: datetime
-       event_type: str
-   
-   class OrderManagementSystem:
-       """Event-driven OMS with CQRS pattern"""
-       
-       def __init__(self):
-           self.order_store = OrderStore()      # Command side
-           self.order_view = OrderView()        # Query side  
-           self.event_bus = EventBus()
-           self.risk_engine = RiskEngine()
-           self.circuit_breaker = CircuitBreaker()
-           
-       async def process_order_command(self, command: OrderCommand):
-           """CQRS command processing with event sourcing"""
-           try:
-               # Pre-trade validation with circuit breaker
-               if self.circuit_breaker.is_open():
-                   raise OrderRejected("Circuit breaker open - broker unavailable")
-                   
-               validation_result = await self.risk_engine.validate(command)
-               if not validation_result.passed:
-                   await self._publish_event(OrderRejected(command.order_id, validation_result.reason))
-                   return validation_result
-                   
-               # Create and persist order
-               order = await self.order_store.create_order(command)
-               events = order.process_command(command)
-               
-               # Event sourcing - persist all events
-               for event in events:
-                   await self.event_bus.publish(event)
-                   await self.order_store.append_event(event)
-                   
-               # Update read model (CQRS query side)
-               await self.order_view.update_from_events(events)
-               
-               return OrderCommandResult(success=True, order_id=order.id)
-               
-           except Exception as e:
-               await self.circuit_breaker.record_failure()
-               raise
-   
-   class OrderState(Enum):
-       NEW = "NEW"
-       VALIDATED = "VALIDATED"
-       SUBMITTED = "SUBMITTED"
-       PENDING = "PENDING"
-       PARTIALLY_FILLED = "PARTIALLY_FILLED"
-       FILLED = "FILLED"
-       CANCELLED = "CANCELLED"
-       REJECTED = "REJECTED"
-   
-   class EnhancedOrder:
-       """Order aggregate with event sourcing capabilities"""
-       def __init__(self, symbol: str, quantity: int, side: str, order_type: str):
-           self.id = generate_order_id()
-           self.symbol = symbol
-           self.quantity = quantity
-           self.side = side  # BUY/SELL
-           self.order_type = order_type  # MARKET/LIMIT
-           self.state = OrderState.NEW
-           self.created_at = datetime.utcnow()
-           self.fills = []
-           self.events = []  # Event sourcing
-           self.version = 0   # Optimistic locking
-           
-       def apply_event(self, event: OrderEvent):
-           """Apply event to order state"""
-           self.events.append(event)
-           self.version += 1
-           
-           if isinstance(event, OrderValidated):
-               self.state = OrderState.VALIDATED
-           elif isinstance(event, OrderSubmitted):
-               self.state = OrderState.SUBMITTED
-           # ... other event handlers
-   ```
-
-2. **Enhanced Pre-Trade Risk Engine** (10 hours)
-   ```python
-   # src/trader/risk_engine.py
-   class RealTimeRiskEngine:
-       """ML-enhanced risk engine with anomaly detection"""
-       
-       def __init__(self, risk_config: Dict):
-           self.max_position_size = risk_config.get('max_position_size', 10000)
-           self.max_daily_loss = risk_config.get('max_daily_loss', 5000)
-           self.max_order_value = risk_config.get('max_order_value', 50000)
-           self.portfolio_tracker = PortfolioTracker()
-           self.anomaly_detector = AnomalyDetector()
-           self.var_calculator = VaRCalculator()
-           
-       async def validate_order(self, order: Order) -> ValidationResult:
-           """Comprehensive pre-trade checks with ML anomaly detection"""
-           # Parallel risk checks for <10ms target
-           checks = await asyncio.gather(
-               self.check_position_limits(order),
-               self.check_daily_loss_limit(order),
-               self.check_order_size_limits(order),
-               self.check_price_reasonability(order),
-               self.check_restricted_list(order),
-               self.check_market_hours(order),
-               self.check_account_restrictions(order),
-               self.check_portfolio_var(order),          # New: VaR check
-               self.check_anomaly_detection(order)       # New: ML anomaly detection
-           )
-           
-           return ValidationResult.combine(checks)
-           
-       async def check_portfolio_var(self, order: Order) -> CheckResult:
-           """Real-time VaR calculation with Monte Carlo simulation"""
-           portfolio_state = await self.portfolio_tracker.get_current_state()
-           
-           # Simulate portfolio with new order
-           simulated_portfolio = portfolio_state.add_order(order)
-           var_95 = await self.var_calculator.calculate_var(
-               simulated_portfolio, 
-               confidence=0.95,
-               time_horizon_days=1
-           )
-           
-           if var_95 > self.max_daily_loss:
-               return CheckResult(
-                   passed=False,
-                   reason=f"VaR limit exceeded: ${var_95:.2f} > ${self.max_daily_loss}"
-               )
-           return CheckResult(passed=True)
-   ```
-
-3. **Position Management** (8 hours)
-   - Real-time position tracking
-   - P&L calculation with fees
-   - Position reconciliation
-   - Corporate action handling
-
-4. **Order Routing** (4 hours)
-   - Smart order routing logic
-   - Venue selection
-   - Order splitting for large orders
-
-### 2.2 Strategy Framework (24 hours) ✅ COMPLETED
-
-**Completion Date**: August 18, 2025
-
-1. **Strategy Engine** (12 hours) ✅
-   ```python
-   # src/strategy/engine.py
-   class StrategyEngine:
-       def __init__(self):
-           self.strategies = {}
-           self.performance_tracker = PerformanceTracker()
-           self.order_manager = OrderManager()
-           
-       async def on_market_data(self, data: MarketData):
-           """Route data to strategies"""
-           tasks = []
-           for strategy in self.active_strategies:
-               if strategy.is_interested_in(data.symbol):
-                   tasks.append(strategy.process_data(data))
-           
-           signals = await asyncio.gather(*tasks)
-           await self.process_signals(signals)
-           
-       async def process_signals(self, signals: List[Signal]):
-           """Convert signals to orders"""
-           for signal in signals:
-               if signal and signal.is_valid():
-                   order = await self.create_order_from_signal(signal)
-                   await self.order_manager.submit_order(order)
-   ```
-
-2. **Backtesting Framework** (8 hours) ✅
-   - ✅ Historical data replay with realistic simulation
-   - ✅ Transaction cost modeling and slippage simulation
-   - ✅ Performance analytics and strategy comparison
-   - ✅ Risk-adjusted metrics calculation
-
-3. **Live Trading Adapter** (4 hours) ✅
-   - ✅ Paper trading mode with realistic execution
-   - ✅ Live trading with comprehensive safeguards
-   - ✅ Position tracking and P&L calculation
-   - ✅ Performance monitoring and metrics collection
-
-### 2.3 Risk Management (24 hours)
-
-1. **Portfolio Risk Manager** (12 hours)
-2. **Kill Switch Implementation** (6 hours)
-3. **Compliance Monitoring** (6 hours)
-
-### 2.4 GUI Integration - Selection & Trading Modes (44 hours)
-
-**New Addition**: Complete GUI implementation for full trading workflow
-
-1. **Selection Mode Implementation** (16 hours)
-   ```python
-   # src/gui/modes/selection_mode.py
-   class SelectionMode:
-       """Strategy optimization and backtesting interface"""
-       
-       def __init__(self, gui_service: GUIService):
-           self.gui_service = gui_service
-           self.strategy_engine = None
-           self.backtest_engine = None
-           
-       async def analyze_discovered_symbols(self, symbols: List[str]):
-           """Analyze symbols from Discovery mode"""
-           # Strategy backtesting
-           results = await self.backtest_engine.run_analysis(symbols)
-           
-           # Risk assessment
-           risk_metrics = await self.calculate_risk_metrics(symbols)
-           
-           # Portfolio optimization
-           optimal_allocation = await self.optimize_portfolio(symbols, results)
-           
-           return SelectionResult(symbols, results, risk_metrics, optimal_allocation)
-   ```
-
-2. **Trading Mode Implementation** (20 hours)
-   ```python
-   # src/gui/modes/trading_mode.py
-   class TradingMode:
-       """Live trading interface with real-time monitoring"""
-       
-       def __init__(self, gui_service: GUIService, oms: OrderManagementSystem):
-           self.gui_service = gui_service
-           self.oms = oms
-           self.position_tracker = PositionTracker()
-           self.pnl_calculator = PnLCalculator()
-           
-       async def submit_order(self, order_request: OrderRequest):
-           """Submit order through OMS with GUI feedback"""
-           # Pre-trade validation UI
-           validation_result = await self.oms.validate_order(order_request)
-           if not validation_result.passed:
-               self.show_validation_error(validation_result.reason)
-               return
-               
-           # Submit order
-           order_id = await self.oms.submit_order(order_request)
-           
-           # Real-time order tracking
-           await self.track_order_status(order_id)
-   ```
-
-3. **OMS-GUI Bridge** (8 hours) ✅ COMPLETED
-
-**Completion Date**: August 18, 2025
-
-**Implemented Architecture**:
-   ```python
-   # src/trader/gui_bridge/bridge.py
-   class OMSGUIBridge:
-       """Real-time OMS-GUI Bridge with WebSocket and REST API"""
-       
-       Components Implemented:
-       ✅ Message Protocol - Standardized messaging system
-       ✅ Event Manager - Pub/sub event broadcasting
-       ✅ Connection Manager - Client lifecycle management
-       ✅ WebSocket Server - Real-time bidirectional communication (ws://localhost:8765)
-       ✅ API Controller - REST endpoints for commands (http://localhost:8766)
-       ✅ Main Bridge - Orchestration with health monitoring
-   ```
-
-**Key Features Delivered**:
-   - ✅ Real-time market data broadcasting
-   - ✅ Command & control interface for trading operations
-   - ✅ Automatic reconnection and error recovery
-   - ✅ Message prioritization and batching
-   - ✅ System health monitoring and alerting
-   - ✅ Performance optimization with parallel processing
-
-## Updated Timeline - Architect's Revision
-
-### Phase Completion Dates (Updated with GUI Integration)
-- **Phase 1**: ✅ Completed (August 17, 2025)
-- **Phase 1.5**: ✅ GUI Foundation Completed (August 17, 2025)
-- **Phase 2**: August 18 - September 5, 2025 (124 hours = 15.5 days)
-  - **Phase 2a**: Backend Trading Engine (80 hours)
-  - **Phase 2b**: GUI Integration (44 hours)
-- **Phase 3**: September 6-12, 2025 (60 hours)
-- **Phase 4**: September 13-17, 2025 (30 hours)
-- **Phase 5**: September 18-24, 2025 (40 hours)
-
-### Total Project Timeline - Updated
-- **Start Date**: August 10, 2025
-- **Phase 1 Completion**: August 17, 2025 ✅
-- **Phase 1.5 Completion**: August 17, 2025 ✅
-- **Updated Projected Completion**: September 24, 2025
-- **Total Duration**: 45 days (+7 days for comprehensive GUI integration)
-
-### Hour Allocation Summary
-- **Phase 1**: 120 hours ✅
-- **Phase 1.5**: 30 hours ✅ (GUI Foundation)
-- **Phase 2**: 124 hours (80 backend + 44 GUI)
-- **Phase 3**: 60 hours  
-- **Phase 4**: 30 hours
-- **Phase 5**: 40 hours
-- **Total**: 404 hours
-
-## Next Steps (Immediate Actions) - Updated August 18, 2025
-
-### Current Implementation Status:
-- ✅ **Phase 2a Backend Trading Engine**: 100% Complete (Strategy Engine, Backtesting, Live Adapter)
-- ✅ **OMS-GUI Bridge Infrastructure**: 100% Complete (WebSocket, REST API, Event Management)
-- 📋 **Phase 2b GUI Modes**: Ready for implementation
-
-### Immediate Priority Tasks:
-
-1. **Selection Mode GUI Implementation** (16 hours) - HIGH PRIORITY
-   - Integrate with completed Strategy Engine via OMS-GUI Bridge
-   - Build strategy analysis interface using WebSocket real-time data
-   - Implement backtesting results visualization
-   - Connect to existing performance tracking system
-
-2. **Trading Mode GUI Implementation** (20 hours) - HIGH PRIORITY
-   - Build real-time trading dashboard using WebSocket feeds
-   - Implement order management interface via REST API commands
-   - Create position tracking and P&L displays
-   - Integrate emergency stop and risk controls
-
-3. **End-to-End Integration Testing** (12 hours) - MEDIUM PRIORITY
-   - Test complete Discovery → Selection → Trading workflow
-   - Validate OMS-GUI Bridge under load conditions
-   - Implement automated GUI testing with backend integration
-
-4. **Enhanced Risk Engine Integration** (8 hours) - MEDIUM PRIORITY
-   - Connect VaR calculation to OMS-GUI Bridge events
-   - Implement real-time risk monitoring displays
-   - Add circuit breaker visualization and controls
-
-## New Architecture Diagram
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    GUI Layer (PySide6)                  │
-├───────────────────┬─────────────────┬───────────────────┤
-│   Discovery Mode  │  Selection Mode │   Trading Mode    │
-│   ✅ Complete     │  📋 Phase 2b    │   📋 Phase 2b     │
-└───────────────────┴─────────────────┴───────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────┐
-│                 OMS-GUI Bridge (✅ Complete)            │
-├─────────────────────────────────────────────────────────┤
-│  WebSocket Server │  API Controller  │  Event Manager  │
-│  ✅ Complete     │  ✅ Complete     │   ✅ Complete    │
-│  Message Protocol │  Connection Mgr  │  Health Monitor │
-│  ✅ Complete     │  ✅ Complete     │   ✅ Complete    │
-└─────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────┐
-│            Phase 2a: Trading Engine (✅ Complete)       │
-├─────────────────────────────────────────────────────────┤
-│  Strategy Engine  │  Backtesting Fwk │  Live Adapter   │
-│  ✅ Complete     │   ✅ Complete    │   ✅ Complete    │
-└─────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────┐
-│            Phase 1: Data Layer (✅ Complete)            │
-├─────────────────────────────────────────────────────────┤
-│ AuthService │ StreamingService │ StreamProcessor │ ... │
-└─────────────────────────────────────────────────────────┘
+class Trade(Base):
+    """Executed trades."""
+    __tablename__ = "trades"
+    
+    id = Column(Integer, primary_key=True)
+    strategy_id = Column(Integer, ForeignKey("strategies.id"))
+    ticker_id = Column(Integer, ForeignKey("tickers.id"), nullable=False)
+    order_id = Column(String(50), unique=True)
+    
+    # Trade details
+    side = Column(Enum('BUY', 'SELL'), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    entry_price = Column(Numeric(10, 4))
+    exit_price = Column(Numeric(10, 4))
+    entry_time = Column(DateTime(timezone=True), nullable=False)
+    exit_time = Column(DateTime(timezone=True))
+    
+    # Status
+    status = Column(Enum('PENDING', 'FILLED', 'PARTIAL', 'CANCELLED'), nullable=False)
+    pnl = Column(Numeric(10, 2))
+    
+    # Relationships
+    strategy = relationship("Strategy", back_populates="trades")
 ```
 
-## Success Metrics Update
+## Implementation Phases
 
-### Phase 1 Achievements
-- ✅ WebSocket message latency: <10ms (achieved: ~5ms)
-- ✅ Connection reliability: >99.9% (achieved: 100% in tests)
-- ✅ Test coverage: >70% for critical components (achieved: 75.73% for WebSocket)
-- ✅ Zero message loss (achieved: deduplication implemented)
+### Phase 1: Backend Foundation (Week 1-2)
 
-### Phase 2 Targets
-- Order placement latency: <50ms (p95)
-- Pre-trade check execution: <10ms
-- Position tracking accuracy: 100%
-- Risk check coverage: 100%
+#### 1.1 Project Setup
+```bash
+# Create new backend structure
+mkdir -p src/{api,services,tasks,strategies}
+touch src/api/{__init__.py,main.py,routers.py,websocket.py}
+touch src/services/{data_service.py,strategy_service.py,trading_service.py}
+touch src/tasks/{data_mining.py,backtesting.py}
+touch src/strategies/{base.py,example_strategies.py}
+```
 
-## Risk Matrix Update
+#### 1.2 FastAPI Server
+```python
+# src/api/main.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from src.api import routers
+from src.api.websocket import websocket_endpoint
 
-| Risk | Probability | Impact | Status | Mitigation Strategy |
-|------|-------------|--------|--------|---------------------|
-| WebSocket disconnection | LOW | MEDIUM | ✅ Mitigated | Auto-reconnect + state sync tested |
-| Message duplication | LOW | LOW | ✅ Mitigated | Deduplication working as designed |
-| Order execution failure | MEDIUM | HIGH | 🟡 Planning | Retry logic + fallback broker |
-| Order latency spike | LOW | HIGH | 🟢 Monitoring | Async processing + load balancing |
-| Memory leak in OMS | MEDIUM | MEDIUM | 🟡 Monitoring | Memory profiling + auto-restart |
-| Risk engine failure | LOW | CRITICAL | 🟢 Prepared | Circuit breaker + safe mode |
-| Compliance violation | LOW | CRITICAL | 🟢 Prepared | Real-time compliance monitoring |
-| Database deadlock | MEDIUM | MEDIUM | 🟡 Planning | Connection pooling + timeout handling |
-| ML model drift | LOW | MEDIUM | 🟡 Planning | Model monitoring + auto-retrain |
+app = FastAPI(title="Personal Trading System")
 
-## Technical Debt Update - Performance Focused
+# CORS for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-### Resolved in Phase 1
-- ✅ WebSocket implementation completed
-- ✅ Message deduplication implemented
-- ✅ State synchronization added
-- ✅ Health monitoring operational
+# Include routers
+app.include_router(routers.auth_router, prefix="/api/auth")
+app.include_router(routers.data_router, prefix="/api/data")
+app.include_router(routers.strategy_router, prefix="/api/strategies")
+app.include_router(routers.trading_router, prefix="/api/trading")
 
-### Updated Priority Matrix
-1. **HIGH Priority** (Phase 2 Parallel Implementation)
-   - **Order Latency Optimization** (<50ms p95 target)
-     - Async order processing pipeline
-     - Connection pooling for broker API
-     - Pre-compiled SQL queries for position lookup
-   - **Memory Usage Monitoring** (Redis cache optimization)
-     - Memory leak detection and auto-cleanup
-     - Cache eviction policies for market data
-     - Connection pool sizing optimization
-   - **Concurrent Order Processing** (1000+ orders/sec capacity)
-     - Lock-free data structures for order queue
-     - Batch processing for risk calculations
-     - Circuit breaker pattern for external API calls
+# WebSocket endpoint
+app.add_websocket_route("/ws", websocket_endpoint)
+```
 
-2. **MEDIUM Priority** (Phase 3 Focus)
-   - **Test Coverage Enhancement** (33% → 80%)
-     - Integration test suite for OMS
-     - Load testing automation (JMeter/Locust)
-     - Chaos engineering tests for resilience
-   - **API Documentation Automation**
-     - OpenAPI spec generation from code
-     - Automated API testing with contract validation
-     - Real-time documentation updates
+#### 1.3 Celery Configuration
+```python
+# src/tasks/celery_app.py
+from celery import Celery
+from src.config import settings
 
-3. **LOW Priority** (Phase 4 Polish)
-   - **Observability Stack**
-     - Prometheus/Grafana monitoring dashboards
-     - ELK stack for log aggregation
-     - Distributed tracing with Jaeger
-   - **Infrastructure as Code**
-     - Terraform deployment automation
-     - Docker containerization
-     - Kubernetes orchestration (future scale)
+celery_app = Celery(
+    "trading_system",
+    broker=settings.redis_url,
+    backend=settings.redis_url,
+    include=['src.tasks.data_mining', 'src.tasks.backtesting']
+)
 
-## Conclusion - Architect's Strategic Assessment (Updated August 18, 2025)
+celery_app.conf.update(
+    task_serializer='json',
+    accept_content=['json'],
+    result_serializer='json',
+    timezone='America/New_York',
+    enable_utc=True,
+)
+```
 
-**MAJOR MILESTONE ACHIEVED**: Phase 2a Backend Trading Engine infrastructure is now 100% complete, representing a significant acceleration beyond original timeline projections.
+### Phase 2: Data Mining Mode (Week 3-4)
 
-### Key Accomplishments (Updated)
-- ✅ All 22 WebSocket tests passing with 75.73% coverage
-- ✅ Production-grade resilience implemented across all layers
-- ✅ Comprehensive error handling and recovery mechanisms
-- ✅ State persistence and synchronization
-- ✅ Health monitoring and alerting systems operational
-- ✅ **Strategy Framework completely operational** (Engine, Backtesting, Live Adapter)
-- ✅ **OMS-GUI Bridge fully implemented** with real-time WebSocket/REST architecture
-- ✅ **Real-time communication infrastructure ready** for GUI implementation
-- ✅ **Paper trading capabilities implemented** and tested
+#### 2.1 Ticker Management
+```python
+# config/core_tickers.json
+{
+    "core_tickers": [
+        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META",
+        "BRK.B", "JPM", "JNJ", "V", "PG", "UNH", "HD", "MA",
+        "SPY", "QQQ", "IWM", "DIA", "VTI", "ARKK", "XLF", "XLK"
+    ],
+    "expansion_plan": {
+        "phase1": "S&P 100 components",
+        "phase2": "NASDAQ 100 components", 
+        "phase3": "Russell 1000 high volume"
+    }
+}
+```
 
-### Architectural Value Delivered
-1. **Complete Backend Infrastructure**: Strategy Engine → Backtesting → Live Trading → OMS Bridge
-2. **Real-Time Communication**: WebSocket (8765) + REST API (8766) operational
-3. **Event-Driven Architecture**: Message Protocol, Event Manager, Connection Manager
-4. **Production-Ready Resilience**: Auto-reconnection, health monitoring, error recovery
-5. **Performance Optimization**: Parallel processing, event batching, connection pooling
+#### 2.2 Data Mining Service
+```python
+# src/services/data_mining_service.py
+class DataMiningService:
+    """Handles historical data collection with progressive expansion."""
+    
+    def __init__(self):
+        self.core_tickers = self._load_core_tickers()
+        self.mined_tickers = set()
+    
+    def _load_core_tickers(self) -> List[str]:
+        """Load initial core ticker list."""
+        with open('config/core_tickers.json') as f:
+            return json.load(f)['core_tickers']
+    
+    async def mine_daily_data(self):
+        """Daily pre-market data mining routine."""
+        # Phase 1: Mine core tickers (high priority)
+        await self._mine_tickers(self.core_tickers, priority='high')
+        
+        # Phase 2: Expand if time permits
+        if self._has_remaining_time():
+            expansion_tickers = await self._get_expansion_candidates()
+            await self._mine_tickers(expansion_tickers, priority='low')
+    
+    async def _mine_tickers(
+        self, 
+        symbols: List[str], 
+        priority: str = 'normal'
+    ):
+        """Mine 2 months of 1-minute data for specified symbols."""
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=60)
+        
+        for symbol in symbols:
+            # Check if already mined today
+            if self._is_data_current(symbol):
+                continue
+                
+            # Schedule mining task
+            mine_ticker_data.apply_async(
+                args=[symbol, start_date, end_date],
+                priority=10 if priority == 'high' else 5
+            )
+            
+    async def _get_expansion_candidates(self) -> List[str]:
+        """Get additional tickers to mine if resources available."""
+        # Start with pre-defined expansion lists
+        # Later: Use Schwab screener API
+        # Later: Add market movers
+        pass
+```
 
-### Current System Capabilities
-The system now provides:
-- ✅ **Real-time market data processing and distribution**
-- ✅ **Strategy backtesting with performance analytics**
-- ✅ **Paper trading with realistic execution simulation**
-- ✅ **WebSocket real-time communication for GUI integration**
-- ✅ **REST API for command and control operations**
-- ✅ **Comprehensive health monitoring and system status**
+#### 2.3 Celery Tasks
+```python
+# src/tasks/data_mining.py
+@celery_app.task(bind=True, max_retries=3)
+def mine_ticker_data(self, symbol: str, start_date: datetime, end_date: datetime):
+    """Mine 1-minute data for a single ticker."""
+    try:
+        # Fetch 2 months of 1-minute candles
+        candles = schwab_client.get_price_history(
+            symbol=symbol,
+            period_type='month',
+            period=2,
+            frequency_type='minute',
+            frequency=1,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # Bulk insert to PostgreSQL
+        bulk_insert_candles(symbol, candles)
+        
+        # Mark as completed
+        update_mining_status(symbol, 'completed')
+        
+    except RateLimitError:
+        # Retry with exponential backoff
+        raise self.retry(countdown=60 * (2 ** self.request.retries))
+```
 
-### Phase 2b Readiness Assessment
-The architecture is optimally positioned for immediate GUI mode implementation:
-- **Communication Infrastructure**: ✅ WebSocket/REST bridge operational
-- **Backend Services**: ✅ All trading engine components complete
-- **Event Broadcasting**: ✅ Real-time market data, orders, positions, performance
-- **Command Interface**: ✅ Trading controls, risk management, system operations
+### Phase 3: Backtesting Mode (Week 5-6)
 
-### Strategic Recommendation
-**Accelerate Phase 2b GUI implementation** with high confidence:
-- Backend infrastructure eliminates technical risk
-- Real-time communication patterns established and tested  
-- Focus entirely on user interface development using proven backend
-- Target completion of Selection and Trading modes within 2-3 weeks
+#### 3.1 Strategy Framework
+```python
+# src/strategies/base.py
+class BaseStrategy(ABC):
+    """Abstract base class for trading strategies."""
+    
+    @abstractmethod
+    def analyze(self, candles: pd.DataFrame) -> Signal:
+        """Analyze candles and generate signal."""
+        pass
+    
+    @abstractmethod
+    def get_parameters(self) -> Dict[str, Any]:
+        """Return strategy parameters."""
+        pass
+```
 
-**Next Review**: August 22, 2025  
-**Architect's Priority**: Implement Selection and Trading Mode GUIs using completed OMS-GUI Bridge infrastructure
+#### 3.2 Backtesting Engine
+```python
+# src/services/backtesting_service.py
+class BacktestingEngine:
+    """Handles strategy backtesting."""
+    
+    async def run_backtest(
+        self,
+        strategy: BaseStrategy,
+        symbols: List[str],
+        start_date: datetime,
+        end_date: datetime
+    ) -> BacktestResult:
+        """Run backtest for a strategy."""
+        # Load historical data
+        # Simulate trades
+        # Calculate performance metrics
+```
 
-### Value Proposition Update
-By Phase 2 completion (September 5, 2025), the system will deliver:
-- Complete automated trading workflow (Discovery → Selection → Trading)
-- Production-ready order management and risk controls
-- Full GUI interface for monitoring and control
-- Real-time market data integration
-- Comprehensive testing and validation framework
+### Phase 4: Trading Mode (Week 7-8)
 
----
-*Document Version*: 4.2 - Phase 2a Backend Completion Update  
-*Last Updated*: August 18, 2025  
-*Author*: System Architect  
-*Review Status*: Phase 1 Complete, Phase 1.5 Complete, Phase 2a Backend Complete, Phase 2b GUI Ready
+#### 4.1 Real-time Streaming
+```python
+# src/services/streaming_service.py
+class StreamingService:
+    """Handles real-time data streaming."""
+    
+    async def connect_to_stream(self):
+        """Connect to Schwab streaming API."""
+        # WebSocket connection
+        # Subscribe to symbols
+        # Process incoming data
+        
+    async def process_stream_data(self, data: Dict):
+        """Process real-time data and trigger strategies."""
+        # Update latest candles
+        # Run active strategies
+        # Generate signals
+```
+
+#### 4.2 Order Management
+```python
+# src/services/trading_service.py
+class TradingService:
+    """Handles order execution and management."""
+    
+    async def execute_signal(self, signal: Signal):
+        """Execute trade based on signal."""
+        # Risk management checks
+        # Position sizing
+        # Order submission
+        # Update database
+```
+
+### Phase 5: Web Frontend (Week 9-10)
+
+#### 5.1 React Setup
+```bash
+# Create frontend
+npx create-react-app frontend --template typescript
+cd frontend
+npm install @reduxjs/toolkit react-redux antd recharts socket.io-client axios
+```
+
+#### 5.2 Core Components
+```typescript
+// src/components/Dashboard.tsx
+// Main dashboard with mode selector
+
+// src/components/DataMining/
+// - TickerSelector.tsx
+// - MiningProgress.tsx
+// - DataGapAnalysis.tsx
+
+// src/components/Backtesting/
+// - StrategySelector.tsx
+// - BacktestRunner.tsx
+// - PerformanceChart.tsx
+
+// src/components/Trading/
+// - LivePositions.tsx
+// - SignalMonitor.tsx
+// - OrderBook.tsx
+```
+
+### Phase 6: Integration & Testing (Week 11-12)
+
+#### 6.1 End-to-End Testing
+- API integration tests
+- WebSocket connection tests
+- Strategy backtesting validation
+- Order execution simulation
+
+#### 6.2 Performance Optimization
+- Database query optimization
+- Caching strategy
+- Frontend bundle optimization
+- WebSocket reconnection logic
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/login` - Login with Schwab OAuth
+- `POST /api/auth/refresh` - Refresh access token
+- `GET /api/auth/status` - Check auth status
+
+### Data Management
+- `GET /api/data/tickers` - List available tickers
+- `POST /api/data/mining/start` - Start data mining job
+- `GET /api/data/mining/status` - Check mining progress
+- `GET /api/data/gaps` - Find data gaps
+- `GET /api/data/candles/{symbol}` - Get historical candles
+
+### Strategy Management
+- `GET /api/strategies` - List all strategies
+- `POST /api/strategies` - Create new strategy
+- `PUT /api/strategies/{id}` - Update strategy parameters
+- `POST /api/strategies/{id}/activate` - Activate strategy
+- `GET /api/strategies/{id}/performance` - Get performance metrics
+
+### Trading Operations
+- `GET /api/trading/positions` - Current positions
+- `GET /api/trading/orders` - Order history
+- `GET /api/trading/signals` - Recent signals
+- `POST /api/trading/execute` - Manual trade execution
+- `GET /api/trading/pnl` - P&L summary
+
+### WebSocket Events
+- `connect` - Initial connection
+- `subscribe` - Subscribe to ticker updates
+- `candle_update` - Real-time candle data
+- `signal` - New trading signal
+- `order_update` - Order status change
+
+## Deployment Strategy
+
+### Development Environment
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      POSTGRES_DB: trading_db
+      POSTGRES_USER: trader
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: .
+    command: uvicorn src.api.main:app --reload --host 0.0.0.0
+    volumes:
+      - ./src:/app/src
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://trader:${DB_PASSWORD}@postgres/trading_db
+      - REDIS_URL=redis://redis:6379
+
+  celery_worker:
+    build: .
+    command: celery -A src.tasks.celery_app worker --loglevel=info
+    volumes:
+      - ./src:/app/src
+    depends_on:
+      - postgres
+      - redis
+
+  celery_beat:
+    build: .
+    command: celery -A src.tasks.celery_app beat --loglevel=info
+    volumes:
+      - ./src:/app/src
+    depends_on:
+      - postgres
+      - redis
+
+  frontend:
+    build: ./frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+```
+
+### Production Deployment
+1. **VPS Setup**: DigitalOcean/Linode with 4GB+ RAM
+2. **Domain**: Configure subdomain with SSL (Let's Encrypt)
+3. **Security**: 
+   - Firewall rules (UFW)
+   - Fail2ban for SSH
+   - Nginx rate limiting
+4. **Monitoring**:
+   - Uptime monitoring (UptimeRobot)
+   - Error tracking (Sentry)
+   - Performance monitoring (New Relic/Datadog)
+
+## Security Considerations
+
+1. **API Security**
+   - JWT tokens for session management
+   - Rate limiting per endpoint
+   - Input validation with Pydantic
+   - SQL injection prevention via ORM
+
+2. **Trading Safety**
+   - Position size limits
+   - Daily loss limits
+   - Strategy isolation
+   - Automatic circuit breakers
+
+3. **Data Protection**
+   - Encrypted database connections
+   - Secure credential storage
+   - Regular backups
+   - Audit logging
+
+## Development Workflow
+
+### Phase 1 Checklist
+- [ ] Setup FastAPI project structure
+- [ ] Configure Celery with Redis
+- [ ] Setup TimescaleDB with migrations
+- [ ] Create base API endpoints
+- [ ] Implement WebSocket handler
+
+### Phase 2 Checklist
+- [ ] Implement data mining service
+- [ ] Create Celery tasks for parallel fetching
+- [ ] Build gap detection algorithm
+- [ ] Test with 10 sample tickers
+- [ ] Verify data integrity
+
+### Phase 3 Checklist
+- [x] Design strategy base class ✅
+- [x] Implement 2-3 example strategies ✅
+- [x] Build backtesting engine ✅
+- [x] Create performance calculator ✅
+- [x] Validate against known results ✅
+
+### Phase 4 Checklist
+- [ ] Setup WebSocket streaming client
+- [ ] Implement signal generation
+- [ ] Build order management system
+- [ ] Add risk management rules
+- [ ] Test paper trading mode
+
+### Phase 5 Checklist
+- [ ] Create React app structure
+- [ ] Build component library
+- [ ] Implement Redux store
+- [ ] Connect WebSocket client
+- [ ] Design responsive UI
+
+### Phase 6 Checklist
+- [ ] Write integration tests
+- [ ] Performance optimization
+- [ ] Security audit
+- [ ] Deployment scripts
+- [ ] Documentation
+
+## Estimated Timeline
+
+- **Total Duration**: 12 weeks
+- **Daily Commitment**: 2-4 hours
+- **MVP Target**: Week 8 (Basic trading functionality)
+- **Full System**: Week 12
+
+## Next Steps
+
+1. **Immediate Actions**:
+   - Set up development environment with Docker
+   - Initialize FastAPI project
+   - Configure TimescaleDB
+
+2. **Week 1 Goals**:
+   - Complete Phase 1.1 and 1.2
+   - Basic API running with auth
+   - Database migrations ready
+
+3. **Success Metrics**:
+   - Data mining: 99% data completeness
+   - Backtesting: < 1 second per strategy per year
+   - Trading: < 100ms signal to order latency
+   - Frontend: < 3 second initial load time
+
+This workflow provides a comprehensive roadmap for building your personal trading system on top of the existing Schwab API authentication foundation.

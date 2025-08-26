@@ -1,6 +1,6 @@
 """Schwab API integration and broker communication module."""
 
-from .schwab_client import SchwabBroker, get_schwab_broker
+from .schwab_client import SchwabBroker, get_schwab_broker, get_schwab_broker_sync
 from .rate_limiter import RateLimiter, CircuitBreaker, AdaptiveRateLimiter
 from .exceptions import (
     BrokerError,
@@ -21,6 +21,7 @@ from .exceptions import (
 __all__ = [
     'SchwabBroker',
     'get_schwab_broker',
+    'get_schwab_broker_sync',
     'RateLimiter',
     'CircuitBreaker',
     'AdaptiveRateLimiter',

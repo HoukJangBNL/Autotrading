@@ -12,7 +12,7 @@ from typing import AsyncGenerator
 from src.config import settings
 from src.utils.logger import setup_logging, logger
 from src.api import routers
-from src.api.websocket import websocket_endpoint
+from src.api.websocket import websocket_endpoint, initialize_websocket_manager, manager as ws_manager
 from src.auth import get_auth_service, AuthenticationError
 from src.data.database import db_service
 from src.services.data_service import DataService
@@ -50,6 +50,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         await trading_service.initialize()
         logger.info("All services initialized")
         
+        # Initialize WebSocket manager
+        await initialize_websocket_manager()
+        logger.info("WebSocket manager initialized")
+        
     except Exception as e:
         logger.error(f"Failed to initialize services: {e}")
         raise
@@ -63,6 +67,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         # Cleanup services
         if auth_service.is_initialized():
             await auth_service.shutdown()
+        
+        # Shutdown WebSocket manager
+        await ws_manager.shutdown()
         
         # Close database connections
         db_service.close()
@@ -208,7 +215,9 @@ async def detailed_health_check():
             "auth": "unknown",
             "data_service": "unknown",
             "strategy_service": "unknown",
-            "trading_service": "unknown"
+            "trading_service": "unknown",
+            "websocket": "unknown",
+            "streaming": "unknown"
         },
         "timestamp": time.time()
     }
@@ -237,6 +246,26 @@ async def detailed_health_check():
     health_status["services"]["data_service"] = "healthy" if data_service._initialized else "not_initialized"
     health_status["services"]["strategy_service"] = "healthy" if strategy_service._initialized else "not_initialized"
     health_status["services"]["trading_service"] = "healthy" if trading_service._initialized else "not_initialized"
+    
+    # Check WebSocket status
+    try:
+        if ws_manager.redis_client:
+            await ws_manager.redis_client.ping()
+            health_status["services"]["websocket"] = "healthy"
+        else:
+            health_status["services"]["websocket"] = "not_initialized"
+    except Exception as e:
+        health_status["services"]["websocket"] = f"unhealthy: {str(e)}"
+        health_status["status"] = "degraded"
+    
+    # Check streaming service status
+    try:
+        from src.services.streaming_service import get_streaming_service
+        service = await get_streaming_service()
+        status = await service.get_status()
+        health_status["services"]["streaming"] = "active" if status["active"] else "inactive"
+    except Exception as e:
+        health_status["services"]["streaming"] = "not_available"
     
     return health_status
 

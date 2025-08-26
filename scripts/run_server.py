@@ -10,7 +10,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 import uvicorn
 from src.api.main import app
-from src.config import settings
 from src.utils.logger import setup_logging, logger
 
 
@@ -20,19 +19,36 @@ def main():
     setup_logging()
     
     logger.info("Starting Trading System API Server")
-    logger.info(f"Environment: {settings.environment}")
-    logger.info(f"Debug mode: {settings.debug}")
+    
+    # Parse command line arguments
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dev", action="store_true", help="Run in development mode")
+    parser.add_argument("--prod", action="store_true", help="Run in production mode")
+    args = parser.parse_args()
+    
+    # Determine environment
+    if args.prod:
+        environment = "production"
+        reload = False
+        debug = False
+    else:
+        environment = "development"
+        reload = True
+        debug = True
+    
+    logger.info(f"Environment: {environment}")
+    logger.info(f"Debug mode: {debug}")
     
     # Server configuration
     host = os.getenv("API_HOST", "0.0.0.0")
     port = int(os.getenv("API_PORT", "8000"))
-    reload = settings.environment == "development"
     
     # SSL configuration for production
     ssl_keyfile = None
     ssl_certfile = None
     
-    if settings.environment == "production":
+    if environment == "production":
         ssl_keyfile = os.getenv("SSL_KEYFILE")
         ssl_certfile = os.getenv("SSL_CERTFILE")
         
@@ -54,8 +70,8 @@ def main():
             host=host,
             port=port,
             reload=reload,
-            log_level="info" if settings.debug else "warning",
-            access_log=settings.debug,
+            log_level="info" if debug else "warning",
+            access_log=debug,
             ssl_keyfile=ssl_keyfile,
             ssl_certfile=ssl_certfile,
             # Workers only in production without reload

@@ -31,7 +31,7 @@ class DatabaseSettings(BaseSettings):
     )
     
     database_url: str = "postgresql://user:password@localhost/trading"
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: str = "redis://:redis123@localhost:6379/0"
     pool_size: int = 20
     max_overflow: int = 40
     pool_timeout: int = 30
@@ -74,6 +74,7 @@ class SystemSettings(BaseSettings):
     environment: str = "development"
     debug: bool = True
     log_level: str = "INFO"
+    api_key: str = "test-api-key-12345"
     
     # GUI settings
     gui_theme: str = "dark"

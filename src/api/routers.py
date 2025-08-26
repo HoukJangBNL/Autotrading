@@ -7,7 +7,7 @@ from datetime import datetime
 
 from src.auth import get_authenticated_client
 from src.utils.logger import logger
-from .dependencies import require_auth, get_db, get_async_db
+from .dependencies import require_auth, get_db, get_async_db, verify_api_key
 from src.tasks import data_mining, backtesting
 
 # Create routers
@@ -23,6 +23,17 @@ class AuthStatusResponse(BaseModel):
     authenticated: bool
     username: str
     expires_at: Optional[datetime] = None
+    
+
+class StreamingRequest(BaseModel):
+    """Streaming request parameters."""
+    symbols: List[str]
+    mode: str = "BOTH"  # QUOTES, CHARTS, or BOTH
+    
+
+class SubscriptionRequest(BaseModel):
+    """Symbol subscription request."""
+    symbols: List[str]
     
 
 class DataMiningRequest(BaseModel):
@@ -59,12 +70,12 @@ class OptimizationRequest(BaseModel):
 
 # Auth endpoints
 @auth_router.get("/status", response_model=AuthStatusResponse)
-async def auth_status(user: dict = Depends(require_auth)):
+async def auth_status(api_key_valid: bool = Depends(verify_api_key)):
     """Check authentication status."""
     try:
         return AuthStatusResponse(
             authenticated=True,
-            username=user.get("username", "unknown")
+            username="api_user"
         )
     except Exception as e:
         logger.error(f"Auth status check failed: {e}")
@@ -244,6 +255,168 @@ async def get_candles(
         raise
     except Exception as e:
         logger.error(f"Failed to get candles: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get candles: {str(e)}"
+        )
+
+
+# Streaming endpoints
+@data_router.post("/streaming/start")
+async def start_streaming_endpoint(
+    request: StreamingRequest,
+    api_key_valid: bool = Depends(verify_api_key)
+):
+    """Start real-time streaming for specified symbols."""
+    try:
+        from src.services.streaming_service import start_streaming, StreamingMode
+        
+        # Start streaming
+        service = await start_streaming(
+            request.symbols,
+            StreamingMode[request.mode.upper()]
+        )
+        
+        # Get status
+        status = await service.get_status()
+        
+        return {
+            "status": "started",
+            "symbols": request.symbols,
+            "mode": request.mode,
+            "streaming_status": status
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to start streaming: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start streaming: {str(e)}"
+        )
+
+
+@data_router.post("/streaming/stop")
+async def stop_streaming_endpoint(api_key_valid: bool = Depends(verify_api_key)):
+    """Stop real-time streaming."""
+    try:
+        from src.services.streaming_service import stop_streaming
+        
+        await stop_streaming()
+        
+        return {
+            "status": "stopped",
+            "message": "Streaming service stopped successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to stop streaming: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to stop streaming: {str(e)}"
+        )
+
+
+@data_router.get("/streaming/status")
+async def get_streaming_status(user: dict = Depends(require_auth)):
+    """Get current streaming service status."""
+    try:
+        from src.services.streaming_service import get_streaming_service
+        
+        service = await get_streaming_service()
+        status = await service.get_status()
+        
+        return status
+        
+    except Exception as e:
+        logger.error(f"Failed to get streaming status: {e}")
+        return {
+            "active": False,
+            "error": str(e)
+        }
+
+
+@data_router.post("/streaming/subscribe")
+async def subscribe_symbols(
+    request: SubscriptionRequest,
+    user: dict = Depends(require_auth)
+):
+    """Subscribe to additional symbols for streaming."""
+    try:
+        from src.services.streaming_service import get_streaming_service
+        
+        service = await get_streaming_service()
+        
+        if not service.active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Streaming service is not active"
+            )
+        
+        await service.subscribe(request.symbols)
+        
+        return {
+            "status": "subscribed",
+            "symbols": request.symbols,
+            "total_subscriptions": len(service.subscribed_symbols)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to subscribe symbols: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to subscribe: {str(e)}"
+        )
+
+
+@data_router.post("/streaming/unsubscribe")
+async def unsubscribe_symbols(
+    request: SubscriptionRequest,
+    user: dict = Depends(require_auth)
+):
+    """Unsubscribe from symbols."""
+    try:
+        from src.services.streaming_service import get_streaming_service
+        
+        service = await get_streaming_service()
+        
+        if not service.active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Streaming service is not active"
+            )
+        
+        await service.unsubscribe(request.symbols)
+        
+        return {
+            "status": "unsubscribed",
+            "symbols": request.symbols,
+            "remaining_subscriptions": len(service.subscribed_symbols)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to unsubscribe symbols: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unsubscribe: {str(e)}"
+        )
+
+
+@data_router.get("/streaming/candles")
+async def get_current_candles(user: dict = Depends(require_auth)):
+    """Get current in-progress candles from streaming service."""
+    try:
+        from src.services.streaming_service import get_streaming_service
+        
+        service = await get_streaming_service()
+        candles = await service.get_current_candles()
+        
+        return {
+            "count": len(candles),
+            "candles": candles
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get current candles: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get candles: {str(e)}"

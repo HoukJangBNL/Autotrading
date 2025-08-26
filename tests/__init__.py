@@ -1,1 +1,0 @@
-"""Test suite for the automated trading system."""

@@ -46,6 +46,16 @@ class MiningStatus(str, Enum):
     FAILED = "failed"
 
 
+class TimeFrame(str, Enum):
+    """Candle timeframe options."""
+    ONE_MIN = "1min"
+    FIVE_MIN = "5min"
+    FIFTEEN_MIN = "15min"
+    THIRTY_MIN = "30min"
+    ONE_HOUR = "1hour"
+    ONE_DAY = "1day"
+
+
 class Ticker(Base, TimestampMixin):
     """Stock ticker information."""
     __tablename__ = "tickers"

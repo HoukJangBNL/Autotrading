@@ -127,8 +127,8 @@ def reset_singletons():
     src.auth.auth_service._auth_instance = None
     
     # Reset historical fetcher singleton
-    import src.data.historical_data
-    src.data.historical_data._fetcher_instance = None
+    # import src.data.historical_data
+    # src.data.historical_data._fetcher_instance = None
     
     # Reset SchwabBroker singleton
     from src.broker import SchwabBroker
@@ -138,7 +138,7 @@ def reset_singletons():
     
     # Cleanup after test
     src.auth.auth_service._auth_instance = None
-    src.data.historical_data._fetcher_instance = None
+    # src.data.historical_data._fetcher_instance = None
     SchwabBroker.reset_instance()
 
 

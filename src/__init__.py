@@ -1,12 +1,11 @@
 """
-Charles Schwab Automated Trading System
+Charles Schwab API Client
 
-A comprehensive automated trading system using the Charles Schwab API
-with real-time streaming, multiple trading strategies, and risk management.
+A Python client for authenticating and interacting with the Charles Schwab API.
 """
 
 __version__ = "0.1.0"
-__author__ = "Trading System Team"
+__author__ = "API Client Team"
 
 # Configure default logging
 import logging

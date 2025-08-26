@@ -85,13 +85,44 @@
   - 워커 설정
   - 태스크 데코레이터 적용
 
-### Phase 1.3: Celery Configuration (예정)
+### Phase 1.3: Celery Configuration ✅ 완료 (2024-11-14)
 
-#### 🎯 목표
-- [ ] Celery 워커 설정
-- [ ] Celery Beat 스케줄러 설정
-- [ ] 태스크 데코레이터 적용
-- [ ] 태스크 모니터링 설정
+#### ✅ 완료된 작업
+- [x] Celery 애플리케이션 설정 완료
+  - Redis를 메시지 브로커로 구성
+  - 작업 큐 정의 (default, data_mining, backtesting)
+  - Beat 스케줄러 설정 (일일/주간 작업)
+- [x] 데이터 마이닝 태스크 구현
+  - `mine_ticker_data`: 개별 티커 데이터 수집
+  - `mine_date_range`: 날짜 범위 병렬 수집
+  - `check_and_fill_gaps`: 데이터 갭 확인 및 채우기
+  - `get_mining_progress`: 진행 상황 조회
+- [x] 백테스팅 태스크 구현
+  - `run_backtest_task`: 개별 전략 백테스트
+  - `optimize_strategy`: 베이지안 최적화
+  - `batch_backtest`: 다중 전략 병렬 백테스트
+  - `get_backtest_progress`: 배치 진행 상황 조회
+- [x] API 엔드포인트 통합
+  - 데이터 마이닝 시작/상태 조회
+  - 백테스트 실행/결과 조회
+  - 전략 최적화/배치 백테스트
+- [x] 운영 스크립트 생성
+  - `run_celery_worker.py`: 워커 실행
+  - `run_celery_beat.py`: 스케줄러 실행
+  - `run_flower.py`: 모니터링 도구 실행
+
+#### 🔍 주요 설계 결정
+1. **큐 분리**: data_mining(우선순위 5), backtesting(우선순위 3)으로 분리
+2. **재시도 전략**: 최대 3회 재시도, 60초 지연
+3. **시간 제한**: 백테스트 1시간, 최적화 2시간
+4. **진행 상황 추적**: Celery의 update_state를 활용한 실시간 진행률
+5. **병렬 처리**: group을 사용한 다중 태스크 병렬 실행
+
+#### 📝 다음 단계
+- Phase 2: Data Mining Mode 구현
+  - TimescaleDB 설정
+  - Schwab API 연동
+  - 실제 데이터 수집 구현
 
 ## 기술 스택 확인
 

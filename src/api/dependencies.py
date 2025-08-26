@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth import get_auth_service, get_authenticated_client, AuthenticationError
 from src.data.database import get_db, get_async_db
 from src.utils.logger import logger
+from src.config import settings
 
 # OAuth2 scheme for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=False)
@@ -126,8 +127,8 @@ async def verify_api_key(api_key: Optional[str] = Depends(get_api_key)) -> bool:
         )
     
     # In a real implementation, check API key against database
-    # For now, just check against a placeholder
-    if api_key != "development-api-key":
+    # For now, check against settings
+    if api_key != settings.system.api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",

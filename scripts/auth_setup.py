@@ -34,8 +34,9 @@ logger = get_logger(__name__)
 class CallbackHandler(BaseHTTPRequestHandler):
     """Handle OAuth callback from Schwab."""
     
-    def __init__(self, *args, auth_queue: queue.Queue, **kwargs):
+    def __init__(self, *args, auth_queue: queue.Queue, callback_path: str = '/', **kwargs):
         self.auth_queue = auth_queue
+        self.callback_path = callback_path
         super().__init__(*args, **kwargs)
     
     def log_message(self, format, *args):
@@ -53,7 +54,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
         self.end_headers()
         
         # Check if this is the callback
-        if parsed_url.path == '/':
+        if parsed_url.path == self.callback_path:
             params = parse_qs(parsed_url.query)
             
             if 'code' in params:
@@ -69,7 +70,9 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 """)
                 
                 # Put the full URL in the queue
-                self.auth_queue.put(f"https://127.0.0.1:8182{self.path}")
+                # Get the port from server address
+                port = self.server.server_address[1]
+                self.auth_queue.put(f"https://127.0.0.1:{port}{self.path}")
                 
             elif 'error' in params:
                 # Error
@@ -134,8 +137,9 @@ class AuthSetup:
         if not self.settings.schwab.app_secret:
             errors.append("- SCHWAB_APP_SECRET is not set")
         
-        if self.settings.schwab.callback_url != "https://127.0.0.1:8182":
-            errors.append(f"- Callback URL should be https://127.0.0.1:8182, got {self.settings.schwab.callback_url}")
+        # Accept any callback URL that starts with https://127.0.0.1
+        if not self.settings.schwab.callback_url.startswith("https://127.0.0.1"):
+            errors.append(f"- Callback URL should start with https://127.0.0.1, got {self.settings.schwab.callback_url}")
         
         if errors:
             print("\n❌ Configuration errors found:")
@@ -156,22 +160,48 @@ class AuthSetup:
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
         
-        # Create server
-        server_address = ('127.0.0.1', 8182)
+        # Create server - Extract port from callback URL
+        callback_url = self.settings.schwab.callback_url
+        port = 8182  # default
+        if callback_url:
+            from urllib.parse import urlparse
+            parsed = urlparse(callback_url)
+            if parsed.port:
+                port = parsed.port
         
-        # Custom handler factory to pass auth_queue
+        server_address = ('127.0.0.1', port)
+        
+        # Custom handler factory to pass auth_queue and callback path
+        parsed_callback = urlparse(self.settings.schwab.callback_url)
+        callback_path = parsed_callback.path or '/'
+        
         def handler_factory(*args, **kwargs):
-            return CallbackHandler(*args, auth_queue=self.auth_queue, **kwargs)
+            return CallbackHandler(*args, auth_queue=self.auth_queue, callback_path=callback_path, **kwargs)
         
         httpd = HTTPServer(server_address, handler_factory)
         
-        # Wrap with SSL
+        # Wrap with SSL - use self-signed certificate
+        # For Python 3.10+, we need to create a self-signed certificate
+        import tempfile
+        import subprocess
+        
+        # Create temporary certificate
+        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as cert_file:
+            cert_path = cert_file.name
+            
+        # Generate self-signed certificate
+        subprocess.run([
+            'openssl', 'req', '-new', '-x509', '-keyout', cert_path,
+            '-out', cert_path, '-days', '365', '-nodes',
+            '-subj', '/CN=localhost'
+        ], capture_output=True)
+        
+        ssl_context.load_cert_chain(cert_path)
+        
+        # Wrap socket with SSL
         httpd.socket = ssl_context.wrap_socket(
             httpd.socket,
-            server_side=True,
-            certfile=None,
-            keyfile=None,
-            ssl_version=ssl.PROTOCOL_TLS
+            server_side=True
         )
         
         # Start server in thread
@@ -200,7 +230,7 @@ class AuthSetup:
         
         # Start callback server
         server = self.start_callback_server()
-        print("✅ Callback server started on https://127.0.0.1:8182")
+        print(f"✅ Callback server started on {self.settings.schwab.callback_url}")
         
         # Open browser
         print(f"\nOpening browser for authentication...")

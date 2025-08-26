@@ -24,7 +24,15 @@
       "Bash(pytest:*)",
       "mcp__sequential-thinking__sequentialthinking",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Bash(redis-cli:*)",
+      "Bash(brew services start:*)",
+      "Bash(cat:*)",
+      "Bash(curl:*)",
+      "Bash(chmod:*)",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }
