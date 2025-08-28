@@ -76,7 +76,7 @@ export const AccountSettings: React.FC = () => {
       {/* Connection Status */}
       <Box sx={{ mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
         <Grid container alignItems="center" spacing={2}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={12} sm={6}>
             <Typography variant="subtitle2" gutterBottom>
               Connection Status
             </Typography>
@@ -87,7 +87,7 @@ export const AccountSettings: React.FC = () => {
               size="small"
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={12} sm={6}>
             <Typography variant="subtitle2" gutterBottom>
               Account ID
             </Typography>
@@ -100,7 +100,7 @@ export const AccountSettings: React.FC = () => {
 
       {/* API Configuration */}
       <Grid container spacing={3}>
-        <Grid item xs={12}>
+        <Grid size={12}>
           <TextField
             fullWidth
             label="API Key"
@@ -123,7 +123,7 @@ export const AccountSettings: React.FC = () => {
           />
         </Grid>
 
-        <Grid item xs={12}>
+        <Grid size={12}>
           <TextField
             fullWidth
             label="API Secret"
@@ -146,7 +146,7 @@ export const AccountSettings: React.FC = () => {
           />
         </Grid>
 
-        <Grid item xs={12}>
+        <Grid size={12}>
           <TextField
             fullWidth
             label="Account ID"

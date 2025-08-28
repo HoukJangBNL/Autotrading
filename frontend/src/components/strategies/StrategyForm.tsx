@@ -209,7 +209,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
       case 0:
         return (
           <Grid container spacing={3}>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Strategy Name"
@@ -220,7 +220,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 required
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Description"
@@ -233,7 +233,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 required
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={12} md={6}>
               <FormControl fullWidth required error={!!errors.type}>
                 <InputLabel>Strategy Type</InputLabel>
                 <Select
@@ -250,7 +250,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={12} md={6}>
               <Autocomplete
                 multiple
                 value={formData.symbols || []}
@@ -291,7 +291,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 </AccordionSummary>
                 <AccordionDetails>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} md={4}>
+                    <Grid size={12} md={4}>
                       <TextField
                         fullWidth
                         label="Name"
@@ -299,7 +299,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                         onChange={(e) => handleParameterChange(index, 'name', e.target.value)}
                       />
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid size={12} md={4}>
                       <FormControl fullWidth>
                         <InputLabel>Type</InputLabel>
                         <Select
@@ -314,7 +314,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                         </Select>
                       </FormControl>
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid size={12} md={4}>
                       {param.type === 'number' ? (
                         <TextField
                           fullWidth
@@ -344,7 +344,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                     </Grid>
                     {param.type === 'number' && (
                       <>
-                        <Grid item xs={12} md={3}>
+                        <Grid size={12} md={3}>
                           <TextField
                             fullWidth
                             label="Min"
@@ -353,7 +353,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                             onChange={(e) => handleParameterChange(index, 'min', parseFloat(e.target.value))}
                           />
                         </Grid>
-                        <Grid item xs={12} md={3}>
+                        <Grid size={12} md={3}>
                           <TextField
                             fullWidth
                             label="Max"
@@ -362,7 +362,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                             onChange={(e) => handleParameterChange(index, 'max', parseFloat(e.target.value))}
                           />
                         </Grid>
-                        <Grid item xs={12} md={3}>
+                        <Grid size={12} md={3}>
                           <TextField
                             fullWidth
                             label="Step"
@@ -373,7 +373,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                         </Grid>
                       </>
                     )}
-                    <Grid item xs={12} md={param.type === 'number' ? 3 : 12}>
+                    <Grid size={12} md={param.type === 'number' ? 3 : 12}>
                       <TextField
                         fullWidth
                         label="Description"
@@ -381,7 +381,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                         onChange={(e) => handleParameterChange(index, 'description', e.target.value)}
                       />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                       <Button
                         color="error"
                         startIcon={<DeleteIcon />}
@@ -400,12 +400,12 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
       case 2:
         return (
           <Grid container spacing={3}>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Typography variant="h6" gutterBottom>
                 Risk Management Settings
               </Typography>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={12} md={6}>
               <Typography gutterBottom>Stop Loss (%)</Typography>
               <Slider
                 value={formData.riskManagement?.stopLoss || 0}
@@ -420,7 +420,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 valueLabelDisplay="auto"
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={12} md={6}>
               <Typography gutterBottom>Take Profit (%)</Typography>
               <Slider
                 value={formData.riskManagement?.takeProfit || 0}
@@ -435,7 +435,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 valueLabelDisplay="auto"
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={12} md={6}>
               <Typography gutterBottom>Position Size (% of capital)</Typography>
               <Slider
                 value={formData.riskManagement?.positionSize || 0}
@@ -450,7 +450,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 valueLabelDisplay="auto"
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={12} md={6}>
               <Typography gutterBottom>Max Drawdown (%)</Typography>
               <Slider
                 value={formData.riskManagement?.maxDrawdown || 0}
@@ -465,7 +465,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 valueLabelDisplay="auto"
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={12} md={6}>
               <TextField
                 fullWidth
                 label="Max Concurrent Positions"
@@ -484,12 +484,12 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
       case 3:
         return (
           <Grid container spacing={3}>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Typography variant="h6" gutterBottom>
                 Trading Schedule
               </Typography>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={12} md={6}>
               <LocalizationProvider dateAdapter={AdapterDateFns}>
                 <TimePicker
                   label="Start Time"
@@ -507,7 +507,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 />
               </LocalizationProvider>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={12} md={6}>
               <LocalizationProvider dateAdapter={AdapterDateFns}>
                 <TimePicker
                   label="End Time"
@@ -525,7 +525,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 />
               </LocalizationProvider>
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Typography gutterBottom>Trading Days</Typography>
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 {TRADING_DAYS.map((day) => (
@@ -563,7 +563,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                 </Typography>
               )}
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Timezone"
@@ -591,12 +591,12 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
               Review Strategy Configuration
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Alert severity="info" sx={{ mb: 2 }}>
                   Please review your strategy configuration before submitting.
                 </Alert>
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid size={12} md={6}>
                 <Paper sx={{ p: 2 }}>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                     Basic Information
@@ -606,7 +606,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                   <Typography><strong>Symbols:</strong> {formData.symbols?.join(', ')}</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid size={12} md={6}>
                 <Paper sx={{ p: 2 }}>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                     Risk Management
@@ -616,7 +616,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                   <Typography><strong>Position Size:</strong> {formData.riskManagement?.positionSize}%</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Paper sx={{ p: 2 }}>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                     Trading Schedule
@@ -632,7 +632,7 @@ export const StrategyForm: React.FC<StrategyFormProps> = ({
                   </Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Paper sx={{ p: 2 }}>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                     Parameters ({formData.parameters?.length})

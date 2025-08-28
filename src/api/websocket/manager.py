@@ -22,6 +22,7 @@ class ConnectionManager:
             "strategy_signals": set(),
             "order_updates": set(),
             "portfolio_updates": set(),
+            "portfolio": set(),  # Add portfolio topic
         }
         self.connection_metadata: Dict[WebSocket, Dict] = {}
     

@@ -25,7 +25,7 @@ export const Backtest: React.FC = () => {
       </Box>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+        <Grid size={12} md={6}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Backtest Configuration
@@ -42,7 +42,7 @@ export const Backtest: React.FC = () => {
           </Paper>
         </Grid>
         
-        <Grid item xs={12} md={6}>
+        <Grid size={12} md={6}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Recent Backtests
@@ -59,7 +59,7 @@ export const Backtest: React.FC = () => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Backtest Results

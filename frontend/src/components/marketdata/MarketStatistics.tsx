@@ -111,7 +111,7 @@ export const MarketStatistics: React.FC<MarketStatisticsProps> = ({ symbol, stat
       {/* Key Stats Grid */}
       <Grid container spacing={2}>
         {/* Day Range */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Box>
             <Typography variant="body2" color="text.secondary" gutterBottom>
               Day Range
@@ -131,7 +131,7 @@ export const MarketStatistics: React.FC<MarketStatisticsProps> = ({ symbol, stat
         </Grid>
         
         {/* 52 Week Range */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Box>
             <Typography variant="body2" color="text.secondary" gutterBottom>
               52 Week Range
@@ -151,7 +151,7 @@ export const MarketStatistics: React.FC<MarketStatisticsProps> = ({ symbol, stat
           </Box>
         </Grid>
         
-        <Grid item xs={6}>
+        <Grid size={6}>
           <Typography variant="body2" color="text.secondary">Volume</Typography>
           <Typography variant="body1" fontWeight="medium">
             {formatNumber(marketStats.volume)}
@@ -161,35 +161,35 @@ export const MarketStatistics: React.FC<MarketStatisticsProps> = ({ symbol, stat
           </Typography>
         </Grid>
         
-        <Grid item xs={6}>
+        <Grid size={6}>
           <Typography variant="body2" color="text.secondary">Market Cap</Typography>
           <Typography variant="body1" fontWeight="medium">
             ${formatNumber(marketStats.marketCap)}
           </Typography>
         </Grid>
         
-        <Grid item xs={6}>
+        <Grid size={6}>
           <Typography variant="body2" color="text.secondary">P/E Ratio</Typography>
           <Typography variant="body1" fontWeight="medium">
             {marketStats.pe.toFixed(2)}
           </Typography>
         </Grid>
         
-        <Grid item xs={6}>
+        <Grid size={6}>
           <Typography variant="body2" color="text.secondary">EPS</Typography>
           <Typography variant="body1" fontWeight="medium">
             ${marketStats.eps.toFixed(2)}
           </Typography>
         </Grid>
         
-        <Grid item xs={6}>
+        <Grid size={6}>
           <Typography variant="body2" color="text.secondary">Beta</Typography>
           <Typography variant="body1" fontWeight="medium">
             {marketStats.beta.toFixed(2)}
           </Typography>
         </Grid>
         
-        <Grid item xs={6}>
+        <Grid size={6}>
           <Typography variant="body2" color="text.secondary">Div Yield</Typography>
           <Typography variant="body1" fontWeight="medium">
             {marketStats.dividendYield.toFixed(2)}%

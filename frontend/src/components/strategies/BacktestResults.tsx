@@ -152,7 +152,7 @@ export const BacktestResults: React.FC<BacktestResultsProps> = ({ result }) => {
     <Box>
       {/* Performance Metrics Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={12} sm={6} md={3}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -167,7 +167,7 @@ export const BacktestResults: React.FC<BacktestResultsProps> = ({ result }) => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={12} sm={6} md={3}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -179,7 +179,7 @@ export const BacktestResults: React.FC<BacktestResultsProps> = ({ result }) => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={12} sm={6} md={3}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -191,7 +191,7 @@ export const BacktestResults: React.FC<BacktestResultsProps> = ({ result }) => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={12} sm={6} md={3}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -266,7 +266,7 @@ export const BacktestResults: React.FC<BacktestResultsProps> = ({ result }) => {
 
       {/* Detailed Metrics Table */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={6}>
+        <Grid size={12} md={6}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Performance Metrics
@@ -309,7 +309,7 @@ export const BacktestResults: React.FC<BacktestResultsProps> = ({ result }) => {
             </TableContainer>
           </Paper>
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid size={12} md={6}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Backtest Configuration

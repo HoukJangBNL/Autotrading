@@ -1,7 +1,7 @@
 """Main FastAPI application for the trading system."""
 
 import time
-from fastapi import FastAPI, Request, HTTPException, status
+from fastapi import FastAPI, Request, HTTPException, status, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -309,16 +309,21 @@ app.include_router(routers.portfolio_router, prefix="/api/portfolio", tags=["por
 
 # WebSocket endpoint
 @app.websocket("/ws")
-async def websocket_endpoint(websocket):
+async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time data streaming."""
-    client_id = await ws_manager.connect(websocket)
+    await websocket.accept()
     try:
+        # Add to manager after accepting
+        ws_manager.active_connections.append(websocket)
+        logger.info(f"WebSocket client connected. Total: {len(ws_manager.active_connections)}")
+        
         while True:
             # Keep connection alive and handle messages
             data = await websocket.receive_text()
             # Handle incoming messages if needed
-            logger.debug(f"Received message from {client_id}: {data}")
+            await websocket_handler.handle_message(websocket, data)
+            logger.debug(f"Received message: {data}")
     except Exception as e:
-        logger.error(f"WebSocket error for client {client_id}: {e}")
+        logger.error(f"WebSocket error: {e}")
     finally:
-        ws_manager.disconnect(client_id)
+        ws_manager.disconnect(websocket)

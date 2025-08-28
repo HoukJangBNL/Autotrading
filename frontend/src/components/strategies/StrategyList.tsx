@@ -156,7 +156,7 @@ export const StrategyList: React.FC<StrategyListProps> = ({
 
       {/* Stats Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={4}>
+        <Grid size={12} sm={4}>
           <Paper sx={{ p: 2 }}>
             <Typography color="text.secondary" gutterBottom>
               Total Strategies
@@ -169,7 +169,7 @@ export const StrategyList: React.FC<StrategyListProps> = ({
             </Typography>
           </Paper>
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid size={12} sm={4}>
           <Paper sx={{ p: 2 }}>
             <Typography color="text.secondary" gutterBottom>
               Testing
@@ -182,7 +182,7 @@ export const StrategyList: React.FC<StrategyListProps> = ({
             </Typography>
           </Paper>
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid size={12} sm={4}>
           <Paper sx={{ p: 2 }}>
             <Typography color="text.secondary" gutterBottom>
               Avg. Return
@@ -203,7 +203,7 @@ export const StrategyList: React.FC<StrategyListProps> = ({
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={3}>
+          <Grid size={12} md={3}>
             <TextField
               fullWidth
               size="small"
@@ -219,7 +219,7 @@ export const StrategyList: React.FC<StrategyListProps> = ({
               }}
             />
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid size={12} md={2}>
             <FormControl fullWidth size="small">
               <InputLabel>Status</InputLabel>
               <Select
@@ -235,7 +235,7 @@ export const StrategyList: React.FC<StrategyListProps> = ({
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid size={12} md={2}>
             <FormControl fullWidth size="small">
               <InputLabel>Type</InputLabel>
               <Select
@@ -253,7 +253,7 @@ export const StrategyList: React.FC<StrategyListProps> = ({
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid size={12} md={2}>
             <FormControl fullWidth size="small">
               <InputLabel>Sort By</InputLabel>
               <Select
@@ -267,7 +267,7 @@ export const StrategyList: React.FC<StrategyListProps> = ({
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={1}>
+          <Grid size={12} md={1}>
             <IconButton
               onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
               size="small"
@@ -280,7 +280,7 @@ export const StrategyList: React.FC<StrategyListProps> = ({
               />
             </IconButton>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid size={12} md={2}>
             <Button
               fullWidth
               variant="outlined"
@@ -297,7 +297,7 @@ export const StrategyList: React.FC<StrategyListProps> = ({
       {filteredStrategies.length > 0 ? (
         <Grid container spacing={3}>
           {filteredStrategies.map((strategy) => (
-            <Grid item xs={12} sm={6} md={4} key={strategy.id}>
+            <Grid size={12} sm={6} md={4} key={strategy.id}>
               <StrategyCard
                 strategy={strategy}
                 onToggle={onToggle}

@@ -72,8 +72,13 @@ class SchwabAuthFlow:
         """Function for schwab-py to read token."""
         return self.token_data
     
-    def _token_write_func(self, token: Dict[str, Any]) -> None:
-        """Function for schwab-py to write token."""
+    def _token_write_func(self, token: Dict[str, Any], **kwargs) -> None:
+        """Function for schwab-py to write token.
+        
+        Accepts additional keyword arguments that schwab-py may pass
+        during token refresh operations.
+        """
+        # Ignore any extra kwargs like refresh_token that schwab-py passes
         self._save_token_data(token)
     
     def get_auth_url(self) -> str:

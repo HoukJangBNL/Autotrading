@@ -111,7 +111,7 @@ export const Dashboard: React.FC = () => {
 
           <Grid container spacing={3}>
             {/* Portfolio Summary Cards - First Row */}
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={12} sm={6} md={3}>
               <DashboardCard
                 title="Total Portfolio Value"
                 value={formatLargeCurrency(summary?.total_value)}
@@ -124,7 +124,7 @@ export const Dashboard: React.FC = () => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={12} sm={6} md={3}>
               <DashboardCard
                 title="Day Change"
                 value={formatCurrency(summary?.day_change)}
@@ -137,7 +137,7 @@ export const Dashboard: React.FC = () => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={12} sm={6} md={3}>
               <DashboardCard
                 title="Cash Balance"
                 value={formatCurrency(summary?.cash_balance)}
@@ -149,7 +149,7 @@ export const Dashboard: React.FC = () => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={12} sm={6} md={3}>
               <DashboardCard
                 title="Buying Power"
                 value={formatCurrency(summary?.buying_power)}
@@ -163,7 +163,7 @@ export const Dashboard: React.FC = () => {
             </Grid>
 
             {/* Portfolio Summary Cards - Second Row */}
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={12} sm={6} md={3}>
               <DashboardCard
                 title="Open P&L"
                 value={formatCurrency(summary?.open_pnl)}
@@ -176,7 +176,7 @@ export const Dashboard: React.FC = () => {
             </Grid>
 
             {/* Portfolio Performance Chart */}
-            <Grid item xs={12} md={8}>
+            <Grid size={12} md={8}>
               <Box sx={{ p: 3, height: 400, bgcolor: 'background.paper', borderRadius: 1 }}>
                 <Typography variant="h6" gutterBottom>
                   Portfolio Performance
@@ -207,7 +207,7 @@ export const Dashboard: React.FC = () => {
             </Grid>
 
             {/* Active Strategies */}
-            <Grid item xs={12} md={4}>
+            <Grid size={12} md={4}>
               <Box height={400}>
                 <StrategiesWidget
                   strategies={activeStrategies}
@@ -219,7 +219,7 @@ export const Dashboard: React.FC = () => {
             </Grid>
 
             {/* Active Positions */}
-            <Grid item xs={12} md={7}>
+            <Grid size={12} md={7}>
               <Box height={400}>
                 <PositionsWidget
                   positions={positions}
@@ -230,7 +230,7 @@ export const Dashboard: React.FC = () => {
             </Grid>
 
             {/* Recent Trades */}
-            <Grid item xs={12} md={5}>
+            <Grid size={12} md={5}>
               <Box height={400}>
                 <RecentTradesWidget
                   trades={recentTrades}

@@ -54,7 +54,7 @@ export const BacktestInterface: React.FC<BacktestInterfaceProps> = ({
       </Typography>
       
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+        <Grid size={12} md={6}>
           <LocalizationProvider dateAdapter={AdapterDateFns}>
             <DatePicker
               label="Start Date"
@@ -69,7 +69,7 @@ export const BacktestInterface: React.FC<BacktestInterfaceProps> = ({
           </LocalizationProvider>
         </Grid>
         
-        <Grid item xs={12} md={6}>
+        <Grid size={12} md={6}>
           <LocalizationProvider dateAdapter={AdapterDateFns}>
             <DatePicker
               label="End Date"
@@ -84,7 +84,7 @@ export const BacktestInterface: React.FC<BacktestInterfaceProps> = ({
           </LocalizationProvider>
         </Grid>
         
-        <Grid item xs={12} md={4}>
+        <Grid size={12} md={4}>
           <TextField
             fullWidth
             label="Initial Capital"
@@ -97,7 +97,7 @@ export const BacktestInterface: React.FC<BacktestInterfaceProps> = ({
           />
         </Grid>
         
-        <Grid item xs={12} md={4}>
+        <Grid size={12} md={4}>
           <TextField
             fullWidth
             label="Commission"
@@ -110,7 +110,7 @@ export const BacktestInterface: React.FC<BacktestInterfaceProps> = ({
           />
         </Grid>
         
-        <Grid item xs={12} md={4}>
+        <Grid size={12} md={4}>
           <TextField
             fullWidth
             label="Slippage"
@@ -123,7 +123,7 @@ export const BacktestInterface: React.FC<BacktestInterfaceProps> = ({
           />
         </Grid>
         
-        <Grid item xs={12}>
+        <Grid size={12}>
           {isRunning ? (
             <>
               <Box sx={{ mb: 2 }}>
@@ -161,7 +161,7 @@ export const BacktestInterface: React.FC<BacktestInterfaceProps> = ({
           )}
         </Grid>
         
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Alert severity="info">
             Backtest will simulate trading using historical data with your strategy parameters.
             Results will show performance metrics, equity curve, and trade history.

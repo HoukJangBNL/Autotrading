@@ -149,7 +149,7 @@ export const SystemInfo: React.FC = () => {
         </Typography>
         
         <Grid container spacing={2}>
-          <Grid item xs={6} sm={3}>
+          <Grid size={6} sm={3}>
             <Typography variant="caption" color="text.secondary">
               Version
             </Typography>
@@ -157,7 +157,7 @@ export const SystemInfo: React.FC = () => {
               v{appInfo.version}
             </Typography>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={6} sm={3}>
             <Typography variant="caption" color="text.secondary">
               Build
             </Typography>
@@ -165,7 +165,7 @@ export const SystemInfo: React.FC = () => {
               {appInfo.build}
             </Typography>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={6} sm={3}>
             <Typography variant="caption" color="text.secondary">
               Environment
             </Typography>
@@ -175,7 +175,7 @@ export const SystemInfo: React.FC = () => {
               color={appInfo.environment === 'production' ? 'success' : 'warning'}
             />
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={6} sm={3}>
             <Typography variant="caption" color="text.secondary">
               Last Updated
             </Typography>
@@ -306,7 +306,7 @@ export const SystemInfo: React.FC = () => {
           </Box>
 
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={6}>
+            <Grid size={6}>
               <Typography variant="body2" color="text.secondary">
                 Network Latency
               </Typography>
@@ -314,7 +314,7 @@ export const SystemInfo: React.FC = () => {
                 {performance.networkLatency} ms
               </Typography>
             </Grid>
-            <Grid item xs={6}>
+            <Grid size={6}>
               <Typography variant="body2" color="text.secondary">
                 API Response Time
               </Typography>

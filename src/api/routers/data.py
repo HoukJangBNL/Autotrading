@@ -35,29 +35,29 @@ async def get_available_symbols(
     Returns symbols that have historical data in the database.
     """
     try:
-        # Query unique symbols from candles table
-        symbols = db.query(Candle.symbol).distinct().all()
+        from ...data.models import Ticker
+        
+        # Query unique tickers that have candle data
+        tickers_with_data = db.query(Ticker).join(Candle, Ticker.id == Candle.ticker_id).distinct().all()
         
         symbol_info = []
-        for symbol_tuple in symbols:
-            symbol = symbol_tuple[0]
-            
-            # Get data range for symbol
+        for ticker in tickers_with_data:
+            # Get data range for ticker
             first_candle = db.query(Candle).filter(
-                Candle.symbol == symbol
+                Candle.ticker_id == ticker.id
             ).order_by(Candle.timestamp.asc()).first()
             
             last_candle = db.query(Candle).filter(
-                Candle.symbol == symbol
+                Candle.ticker_id == ticker.id
             ).order_by(Candle.timestamp.desc()).first()
             
             if first_candle and last_candle:
                 symbol_info.append(SymbolInfo(
-                    symbol=symbol,
-                    name=symbol,  # TODO: Add proper name lookup
+                    symbol=ticker.symbol,
+                    name=ticker.name or ticker.symbol,
                     data_start=first_candle.timestamp,
                     data_end=last_candle.timestamp,
-                    candle_count=db.query(Candle).filter(Candle.symbol == symbol).count()
+                    candle_count=db.query(Candle).filter(Candle.ticker_id == ticker.id).count()
                 ))
         
         return symbol_info
@@ -91,16 +91,23 @@ async def get_candles(
     - limit: Maximum number of candles to return
     """
     try:
+        from ...data.models import Ticker
+        
         # Set default date range if not provided
         if not end_date:
             end_date = datetime.now()
         if not start_date:
             start_date = end_date - timedelta(days=7)
         
-        # Query candles
+        # Find ticker for symbol
+        ticker = db.query(Ticker).filter(Ticker.symbol == symbol.upper()).first()
+        if not ticker:
+            logger.warning(f"Symbol {symbol} not found")
+            return []
+        
+        # Query candles (note: timeframe is always 1min in database)
         query = db.query(Candle).filter(
-            Candle.symbol == symbol.upper(),
-            Candle.timeframe == timeframe,
+            Candle.ticker_id == ticker.id,
             Candle.timestamp >= start_date,
             Candle.timestamp <= end_date
         ).order_by(Candle.timestamp.desc()).limit(limit)
@@ -244,11 +251,18 @@ async def identify_data_gaps(
     try:
         gaps = {}
         
+        from ...data.models import Ticker
+        
         for symbol in symbols:
-            # Get all candles for symbol
+            # Find ticker for symbol
+            ticker = db.query(Ticker).filter(Ticker.symbol == symbol.upper()).first()
+            if not ticker:
+                gaps[symbol] = [{"type": "no_ticker", "message": "Symbol not found"}]
+                continue
+                
+            # Get all candles for ticker (note: timeframe is always 1min in database)
             candles = db.query(Candle.timestamp).filter(
-                Candle.symbol == symbol.upper(),
-                Candle.timeframe == timeframe
+                Candle.ticker_id == ticker.id
             ).order_by(Candle.timestamp.asc()).all()
             
             if not candles:

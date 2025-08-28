@@ -170,7 +170,7 @@ export const RiskMonitor: React.FC<RiskMonitorProps> = ({ metrics }) => {
       {/* Risk Metrics Grid */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {/* Exposure */}
-        <Grid item xs={12} sm={6}>
+        <Grid size={12} sm={6}>
           <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Portfolio Exposure
@@ -204,7 +204,7 @@ export const RiskMonitor: React.FC<RiskMonitorProps> = ({ metrics }) => {
         </Grid>
 
         {/* Margin */}
-        <Grid item xs={12} sm={6}>
+        <Grid size={12} sm={6}>
           <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Margin Utilization
@@ -238,7 +238,7 @@ export const RiskMonitor: React.FC<RiskMonitorProps> = ({ metrics }) => {
         </Grid>
 
         {/* Positions */}
-        <Grid item xs={12} sm={6}>
+        <Grid size={12} sm={6}>
           <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Open Positions
@@ -264,7 +264,7 @@ export const RiskMonitor: React.FC<RiskMonitorProps> = ({ metrics }) => {
         </Grid>
 
         {/* Buying Power */}
-        <Grid item xs={12} sm={6}>
+        <Grid size={12} sm={6}>
           <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Buying Power

@@ -152,7 +152,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
               Performance
             </Typography>
             <Grid container spacing={2} sx={{ mt: 0.5 }}>
-              <Grid item xs={6}>
+              <Grid size={6}>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
                     Total Return
@@ -173,7 +173,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
                   </Box>
                 </Box>
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={6}>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
                     Sharpe Ratio
@@ -183,7 +183,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
                   </Typography>
                 </Box>
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={6}>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
                     Win Rate
@@ -193,7 +193,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
                   </Typography>
                 </Box>
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={6}>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
                     Max Drawdown

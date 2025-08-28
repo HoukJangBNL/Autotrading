@@ -7,7 +7,8 @@ from datetime import datetime
 import asyncio
 from dataclasses import dataclass
 
-from ..auth import get_auth_service
+from schwab.client import Client
+from ..api.routers.auth import get_schwab_auth
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -49,7 +50,7 @@ class AccountService:
     
     def __init__(self):
         """Initialize account service."""
-        self.auth_service = get_auth_service()
+        self.schwab_auth = get_schwab_auth()
         self._account_cache = {}
         self._position_cache = {}
         self._last_update = None
@@ -62,7 +63,7 @@ class AccountService:
             List of dictionaries containing accountNumber and hashValue
         """
         try:
-            client = await self.auth_service.ensure_authenticated()
+            client = await self.schwab_auth.ensure_authenticated()
             response = await client.get_account_numbers()
             response.raise_for_status()
             
@@ -86,7 +87,7 @@ class AccountService:
             AccountBalance object with account details
         """
         try:
-            client = await self.auth_service.ensure_authenticated()
+            client = await self.schwab_auth.ensure_authenticated()
             
             # Get account hash if not provided
             if not account_hash:
@@ -96,7 +97,7 @@ class AccountService:
                 account_hash = accounts[0]['hashValue']
                 
             # Get account details
-            response = await client.get_account(account_hash, fields=['positions'])
+            response = await client.get_account(account_hash, fields=[Client.Account.Fields.POSITIONS])
             response.raise_for_status()
             
             account_data = response.json()
@@ -140,10 +141,10 @@ class AccountService:
             List of AccountBalance objects
         """
         try:
-            client = await self.auth_service.ensure_authenticated()
+            client = await self.schwab_auth.ensure_authenticated()
             
             # Get all accounts
-            response = await client.get_accounts(fields=['positions'])
+            response = await client.get_accounts(fields=[Client.Account.Fields.POSITIONS])
             response.raise_for_status()
             
             accounts_data = response.json()
@@ -197,7 +198,7 @@ class AccountService:
             List of Position objects
         """
         try:
-            client = await self.auth_service.ensure_authenticated()
+            client = await self.schwab_auth.ensure_authenticated()
             
             # Get account hash if not provided
             if not account_hash:
@@ -207,7 +208,7 @@ class AccountService:
                 account_hash = accounts[0]['hashValue']
                 
             # Get account with positions
-            response = await client.get_account(account_hash, fields=['positions'])
+            response = await client.get_account(account_hash, fields=[Client.Account.Fields.POSITIONS])
             response.raise_for_status()
             
             account_data = response.json()
@@ -268,7 +269,7 @@ class AccountService:
             Dictionary of symbol -> quote data
         """
         try:
-            client = await self.auth_service.ensure_authenticated()
+            client = await self.schwab_auth.ensure_authenticated()
             
             # Get quotes
             response = await client.get_quotes(symbols)

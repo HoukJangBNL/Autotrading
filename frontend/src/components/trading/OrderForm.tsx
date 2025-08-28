@@ -194,7 +194,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ symbol: initialSymbol, onS
       />
 
       <Grid container spacing={2}>
-        <Grid item xs={6}>
+        <Grid size={6}>
           <FormControl fullWidth margin="normal" size="small">
             <InputLabel>Order Type</InputLabel>
             <Select
@@ -209,7 +209,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ symbol: initialSymbol, onS
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={6}>
+        <Grid size={6}>
           <FormControl fullWidth margin="normal" size="small">
             <InputLabel>Time in Force</InputLabel>
             <Select

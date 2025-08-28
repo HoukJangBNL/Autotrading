@@ -1,6 +1,7 @@
 """Portfolio service for managing positions and portfolio analytics."""
 
 import logging
+import json
 from typing import Dict, List, Any, Optional
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -60,6 +61,7 @@ class PortfolioService:
         self._metrics_cache = {}
         self._allocation_cache = {}
         self._history_cache = {}
+        self._position_cache = {}
         self._last_update = None
         self.redis_client = None
         
@@ -151,7 +153,7 @@ class PortfolioService:
                 cache_key = f"portfolio:{account_info.account_hash}"
                 await self.redis_client.set(
                     cache_key,
-                    summary,
+                    json.dumps(summary),
                     ex=60  # Cache for 1 minute
                 )
                 
@@ -374,7 +376,7 @@ class PortfolioService:
                 
                 await self.redis_client.publish(
                     'portfolio_updates',
-                    update_data
+                    json.dumps(update_data)
                 )
                 
             logger.info(f"Updated portfolio with real-time quotes for account {account_hash}")

@@ -62,7 +62,7 @@ export const Portfolio: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* Summary Cards */}
-        <Grid item xs={12} md={3}>
+        <Grid size={12} md={3}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -78,7 +78,7 @@ export const Portfolio: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid size={12} md={3}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -94,7 +94,7 @@ export const Portfolio: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid size={12} md={3}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -110,7 +110,7 @@ export const Portfolio: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid size={12} md={3}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -127,7 +127,7 @@ export const Portfolio: React.FC = () => {
         </Grid>
 
         {/* Asset Allocation */}
-        <Grid item xs={12} md={6}>
+        <Grid size={12} md={6}>
           <Paper sx={{ p: 3, height: 400 }}>
             <Typography variant="h6" gutterBottom>
               Asset Allocation
@@ -145,7 +145,7 @@ export const Portfolio: React.FC = () => {
         </Grid>
 
         {/* Performance Chart */}
-        <Grid item xs={12} md={6}>
+        <Grid size={12} md={6}>
           <Paper sx={{ p: 3, height: 400 }}>
             <Typography variant="h6" gutterBottom>
               Performance
@@ -163,7 +163,7 @@ export const Portfolio: React.FC = () => {
         </Grid>
 
         {/* Holdings Table */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Holdings

@@ -75,10 +75,10 @@ export const MarketData: React.FC = () => {
       {selectedSymbol ? (
         <Grid container spacing={2} sx={{ height: 'calc(100% - 60px)' }}>
           {/* Main Content Area */}
-          <Grid item xs={12} md={8}>
+          <Grid size={12} md={8}>
             <Grid container spacing={2} sx={{ height: '100%' }}>
               {/* Chart */}
-              <Grid item xs={12} sx={{ height: isMobile ? 400 : 600 }}>
+              <Grid size={12} sx={{ height: isMobile ? 400 : 600 }}>
                 <TradingChart
                   symbol={selectedSymbol}
                   data={candles[selectedSymbol]}
@@ -88,7 +88,7 @@ export const MarketData: React.FC = () => {
               
               {/* Market Statistics */}
               {!isMobile && (
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <MarketStatistics
                     symbol={selectedSymbol}
                     stats={stats[selectedSymbol]}
@@ -99,10 +99,10 @@ export const MarketData: React.FC = () => {
           </Grid>
           
           {/* Right Sidebar */}
-          <Grid item xs={12} md={4}>
+          <Grid size={12} md={4}>
             <Grid container spacing={2}>
               {/* Order Book */}
-              <Grid item xs={12} sm={6} md={12}>
+              <Grid size={12} sm={6} md={12}>
                 <Box sx={{ height: isMobile ? 400 : 500 }}>
                   <OrderBook
                     symbol={selectedSymbol}
@@ -113,7 +113,7 @@ export const MarketData: React.FC = () => {
               </Grid>
               
               {/* Recent Trades */}
-              <Grid item xs={12} sm={6} md={12}>
+              <Grid size={12} sm={6} md={12}>
                 <Box sx={{ height: isMobile ? 400 : 500 }}>
                   <RecentTrades
                     symbol={selectedSymbol}
@@ -124,7 +124,7 @@ export const MarketData: React.FC = () => {
               
               {/* Market Statistics (Mobile) */}
               {isMobile && (
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <MarketStatistics
                     symbol={selectedSymbol}
                     stats={stats[selectedSymbol]}

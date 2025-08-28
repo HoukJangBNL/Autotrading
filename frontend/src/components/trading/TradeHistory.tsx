@@ -241,7 +241,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ trades = [], onExpor
         <LocalizationProvider dateAdapter={AdapterDateFns}>
           <Box sx={{ mb: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={3}>
+              <Grid size={{ xs: 12, sm: 3 }}>
                 <TextField
                   fullWidth
                   size="small"
@@ -250,7 +250,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ trades = [], onExpor
                   onChange={(e) => setFilterSymbol(e.target.value)}
                 />
               </Grid>
-              <Grid item xs={12} sm={3}>
+              <Grid size={{ xs: 12, sm: 3 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Side</InputLabel>
                   <Select
@@ -264,7 +264,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ trades = [], onExpor
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} sm={3}>
+              <Grid size={{ xs: 12, sm: 3 }}>
                 <DatePicker
                   label="Start Date"
                   value={startDate}
@@ -272,7 +272,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ trades = [], onExpor
                   slotProps={{ textField: { fullWidth: true, size: 'small' } }}
                 />
               </Grid>
-              <Grid item xs={12} sm={3}>
+              <Grid size={{ xs: 12, sm: 3 }}>
                 <DatePicker
                   label="End Date"
                   value={endDate}
@@ -288,7 +288,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ trades = [], onExpor
       {/* Summary Statistics */}
       <Box sx={{ mb: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
         <Grid container spacing={3}>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Typography variant="caption" color="text.secondary">
               Total Trades
             </Typography>
@@ -296,7 +296,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ trades = [], onExpor
               {totalTrades}
             </Typography>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Typography variant="caption" color="text.secondary">
               Total Volume
             </Typography>
@@ -304,7 +304,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ trades = [], onExpor
               ${totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Typography>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Typography variant="caption" color="text.secondary">
               Total P&L
             </Typography>
@@ -315,7 +315,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ trades = [], onExpor
               {totalPnL >= 0 ? '+' : ''}${Math.abs(totalPnL).toFixed(2)}
             </Typography>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Typography variant="caption" color="text.secondary">
               Win Rate
             </Typography>

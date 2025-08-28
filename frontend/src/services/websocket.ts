@@ -15,6 +15,13 @@ class WebSocketService {
   private pingInterval: NodeJS.Timeout | null = null;
 
   connect() {
+    // Prevent multiple connections
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || 
+        this.ws.readyState === WebSocket.OPEN)) {
+      console.log('WebSocket already connected or connecting');
+      return;
+    }
+    
     const wsUrl = process.env.REACT_APP_WS_URL || 'wss://127.0.0.1:8182/ws';
     
     try {
@@ -70,6 +77,14 @@ class WebSocketService {
             break;
           case 'pong':
             // Pong response from server
+            break;
+          case 'subscription':
+            // Subscription confirmation from server
+            console.log(`Subscription confirmed: ${data.topic} - ${data.status}`);
+            break;
+          case 'subscribed':
+            // Symbol subscription confirmation
+            console.log(`Subscribed to symbol: ${data.symbol} (${data.timeframe})`);
             break;
           case 'error':
             console.error('WebSocket error message:', data.message);

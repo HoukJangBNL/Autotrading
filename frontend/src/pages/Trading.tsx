@@ -114,15 +114,15 @@ export const Trading: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* Left Column - Order Entry and Quick Trade */}
-        <Grid item xs={12} lg={3}>
+        <Grid size={{ xs: 12, lg: 3 }}>
           <Grid container spacing={2}>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <QuickTrade
                 symbol={selectedSymbol}
                 onTrade={handleQuickTrade}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <OrderForm
                 symbol={selectedSymbol}
                 onSubmit={handleOrderSubmit}
@@ -132,7 +132,7 @@ export const Trading: React.FC = () => {
         </Grid>
 
         {/* Center Column - Positions and Orders */}
-        <Grid item xs={12} lg={6}>
+        <Grid size={{ xs: 12, lg: 6 }}>
           <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ mb: 2 }}>
             <Tab label="Positions" />
             <Tab label="Orders" />
@@ -168,7 +168,7 @@ export const Trading: React.FC = () => {
         </Grid>
 
         {/* Right Column - Risk Monitor */}
-        <Grid item xs={12} lg={3}>
+        <Grid size={{ xs: 12, lg: 3 }}>
           <RiskMonitor />
         </Grid>
       </Grid>

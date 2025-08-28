@@ -104,7 +104,7 @@ export const TradingPreferences: React.FC = () => {
           Order Defaults
         </Typography>
         <Grid container spacing={3}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={12} sm={6}>
             <FormControl fullWidth>
               <InputLabel>Default Order Type</InputLabel>
               <Select
@@ -118,7 +118,7 @@ export const TradingPreferences: React.FC = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={12} sm={6}>
             <TextField
               fullWidth
               label="Default Quantity"
@@ -137,7 +137,7 @@ export const TradingPreferences: React.FC = () => {
           Risk Management
         </Typography>
         <Grid container spacing={3}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={12} sm={6}>
             <TextField
               fullWidth
               label="Max Daily Loss"
@@ -151,7 +151,7 @@ export const TradingPreferences: React.FC = () => {
               helperText="Maximum allowed loss per trading day"
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={12} sm={6}>
             <TextField
               fullWidth
               label="Max Position Size"
@@ -172,7 +172,7 @@ export const TradingPreferences: React.FC = () => {
           Trading Schedule
         </Typography>
         <Grid container spacing={3}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={12} sm={6}>
             <TimePicker
               label="Trading Start Time"
               value={parseTime(localSettings.tradingStartTime)}
@@ -184,7 +184,7 @@ export const TradingPreferences: React.FC = () => {
               slotProps={{ textField: { fullWidth: true } }}
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={12} sm={6}>
             <TimePicker
               label="Trading End Time"
               value={parseTime(localSettings.tradingEndTime)}

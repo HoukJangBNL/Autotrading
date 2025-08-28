@@ -131,7 +131,7 @@ export const ApplicationSettings: React.FC = () => {
         </Box>
 
         <Grid container spacing={3}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={12} sm={6}>
             <FormControl fullWidth>
               <InputLabel>Default Chart Type</InputLabel>
               <Select
@@ -160,7 +160,7 @@ export const ApplicationSettings: React.FC = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={12} sm={6}>
             <FormControl fullWidth>
               <InputLabel>Default Time Interval</InputLabel>
               <Select

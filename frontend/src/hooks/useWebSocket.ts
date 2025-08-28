@@ -136,10 +136,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
   }, []);
 
   useEffect(() => {
-    if (autoConnect && !isConnected) {
-      connect();
-    }
-    
     // Set up message handler
     const unsubscribe = store.subscribe(() => {
       const state = store.getState();
@@ -151,11 +147,22 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
     
     return () => {
       unsubscribe();
-      if (autoConnect) {
-        disconnect();
-      }
     };
-  }, [autoConnect, connect, disconnect, handleMessage, isConnected]);
+  }, [handleMessage]);
+  
+  useEffect(() => {
+    // Only auto-connect if not already connected and autoConnect is true
+    if (autoConnect && !isConnected) {
+      // Small delay to prevent race conditions with WebSocketInitializer
+      const timer = setTimeout(() => {
+        if (!websocketService.isConnected()) {
+          connect();
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [autoConnect]); // Remove isConnected from dependencies to prevent loops
 
   return {
     isConnected,

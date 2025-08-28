@@ -126,7 +126,7 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol: initialSymbol, o
       {/* Market Data Display */}
       <Box sx={{ mb: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
         <Grid container spacing={2}>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Box>
               <Typography variant="h4" fontWeight="bold">
                 ${marketData.last.toFixed(2)}
@@ -146,7 +146,7 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol: initialSymbol, o
               </Box>
             </Box>
           </Grid>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Box sx={{ textAlign: 'right' }}>
               <Typography variant="caption" color="text.secondary">
                 Vol: {marketData.volume}
@@ -161,13 +161,13 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol: initialSymbol, o
         </Grid>
         <Divider sx={{ my: 1 }} />
         <Grid container spacing={2}>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Typography variant="caption" color="text.secondary">Bid</Typography>
             <Typography variant="body1" fontWeight="medium">
               ${marketData.bid.toFixed(2)}
             </Typography>
           </Grid>
-          <Grid item xs={6} sx={{ textAlign: 'right' }}>
+          <Grid size={6} sx={{ textAlign: 'right' }}>
             <Typography variant="caption" color="text.secondary">Ask</Typography>
             <Typography variant="body1" fontWeight="medium">
               ${marketData.ask.toFixed(2)}
@@ -177,9 +177,12 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol: initialSymbol, o
       </Box>
 
       {/* Current Position */}
-      {hasPosition && (
+      {hasPosition && currentPosition && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Current Position: {currentPosition.quantity} shares @ ${currentPosition.avgCost.toFixed(2)}
+          Current Position: {currentPosition.quantity} shares 
+          {currentPosition.avgCost !== undefined && (
+            <> @ ${currentPosition.avgCost.toFixed(2)}</>
+          )}
         </Alert>
       )}
 
@@ -232,7 +235,7 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol: initialSymbol, o
       {/* Order Value Display */}
       <Box sx={{ mb: 2, p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
         <Grid container spacing={2}>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Typography variant="caption" color="text.secondary">
               Buy Value
             </Typography>
@@ -240,7 +243,7 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol: initialSymbol, o
               ${calculateOrderValue(OrderSide.BUY).toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </Typography>
           </Grid>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Typography variant="caption" color="text.secondary">
               Sell Value
             </Typography>
@@ -253,7 +256,7 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol: initialSymbol, o
 
       {/* Quick Action Buttons */}
       <Grid container spacing={2}>
-        <Grid item xs={6}>
+        <Grid size={6}>
           <Button
             fullWidth
             variant="contained"
@@ -271,7 +274,7 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol: initialSymbol, o
             Quick Buy
           </Button>
         </Grid>
-        <Grid item xs={6}>
+        <Grid size={6}>
           <Button
             fullWidth
             variant="contained"
@@ -310,12 +313,12 @@ export const QuickTrade: React.FC<QuickTradeProps> = ({ symbol: initialSymbol, o
       {/* Market Status */}
       <Box sx={{ mt: 2, p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Typography variant="caption" color="text.secondary">
               Market Status
             </Typography>
           </Grid>
-          <Grid item xs={6} sx={{ textAlign: 'right' }}>
+          <Grid size={6} sx={{ textAlign: 'right' }}>
             <Chip
               label="Market Open"
               size="small"
