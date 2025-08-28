@@ -19,48 +19,41 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)) -> dic
     """Get current authenticated user from token.
     
     This is a dependency that can be used in protected endpoints.
-    It validates the token and returns user information.
+    For Schwab OAuth, we check the stored token file instead of JWT.
     
     Args:
-        token: OAuth2 bearer token from Authorization header
+        token: OAuth2 bearer token from Authorization header (optional for Schwab OAuth)
         
     Returns:
         User information dictionary
         
     Raises:
-        HTTPException: If token is invalid or missing
+        HTTPException: If not authenticated
     """
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
     try:
-        # For now, we just verify that auth service is initialized
-        # In a full implementation, this would decode and validate the token
-        auth_service = get_auth_service()
-        if not auth_service.is_initialized():
-            raise AuthenticationError("Auth service not initialized")
+        # Import here to avoid circular dependency
+        from src.api.routers.auth import get_schwab_auth
         
-        # Get authenticated client to verify token validity
-        client = await get_authenticated_client()
+        # Check if we have a valid Schwab client
+        schwab_auth = get_schwab_auth()
+        client = schwab_auth.load_existing_client()
         
-        # Return user info (placeholder for now)
+        if not client:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Return user info with the Schwab client
         return {
             "username": "trader",
             "is_authenticated": True,
             "client": client  # Store client for use in endpoints
         }
         
-    except AuthenticationError as e:
-        logger.error(f"Authentication failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error during authentication: {e}")
         raise HTTPException(

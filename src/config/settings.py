@@ -17,7 +17,7 @@ class SchwabSettings(BaseSettings):
     
     api_key: str
     app_secret: str
-    callback_url: str = "https://127.0.0.1:8182"
+    callback_url: str = "https://127.0.0.1:8182/api/auth/callback"
     account_number: Optional[str] = None
     token_path: str = "config/token.json"
 
@@ -36,6 +36,27 @@ class DatabaseSettings(BaseSettings):
     max_overflow: int = 40
     pool_timeout: int = 30
     echo: bool = False
+
+
+class RedisSettings(BaseSettings):
+    """Redis configuration."""
+    
+    model_config = SettingsConfigDict(
+        env_prefix="REDIS_",
+        case_sensitive=False
+    )
+    
+    host: str = "localhost"
+    port: int = 6379
+    db: int = 0
+    password: Optional[str] = None
+    
+    @property
+    def url(self) -> str:
+        """Get Redis URL."""
+        if self.password:
+            return f"redis://:{self.password}@{self.host}:{self.port}/{self.db}"
+        return f"redis://{self.host}:{self.port}/{self.db}"
 
 
 class TradingSettings(BaseSettings):
@@ -105,6 +126,7 @@ class Settings(BaseSettings):
     # Sub-configurations
     schwab: SchwabSettings
     database: DatabaseSettings
+    redis: RedisSettings
     trading: TradingSettings
     system: SystemSettings
     
@@ -120,6 +142,8 @@ class Settings(BaseSettings):
             kwargs['schwab'] = SchwabSettings()
         if 'database' not in kwargs:
             kwargs['database'] = DatabaseSettings()
+        if 'redis' not in kwargs:
+            kwargs['redis'] = RedisSettings()
         if 'trading' not in kwargs:
             kwargs['trading'] = TradingSettings()
         if 'system' not in kwargs:

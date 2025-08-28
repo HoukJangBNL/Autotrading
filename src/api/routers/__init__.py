@@ -1,0 +1,19 @@
+"""API routers initialization."""
+
+from .auth import router as auth_router
+from .data import router as data_router
+from .strategies import router as strategies_router
+from .backtest import router as backtest_router
+from .trading import router as trading_router
+from .portfolio import router as portfolio_router
+from .account import router as account_router
+
+__all__ = [
+    "auth_router",
+    "data_router",
+    "strategies_router",
+    "backtest_router",
+    "trading_router",
+    "portfolio_router",
+    "account_router",
+]

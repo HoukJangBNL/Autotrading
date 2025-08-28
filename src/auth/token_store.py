@@ -1,11 +1,16 @@
 """Secure token storage using keyring and database backup."""
 
 import json
-import keyring
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from pathlib import Path
 import os
+
+try:
+    import keyring
+    KEYRING_AVAILABLE = True
+except Exception:
+    KEYRING_AVAILABLE = False
 
 from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
@@ -36,11 +41,25 @@ class TokenStore:
     def _init_encryption(self) -> None:
         """Initialize encryption for database storage."""
         # Generate or load encryption key
-        key = keyring.get_password(self.service_name, "encryption_key")
-        if not key:
-            key = Fernet.generate_key().decode()
-            keyring.set_password(self.service_name, "encryption_key", key)
-            logger.info("Generated new encryption key")
+        if KEYRING_AVAILABLE:
+            try:
+                key = keyring.get_password(self.service_name, "encryption_key")
+                if not key:
+                    key = Fernet.generate_key().decode()
+                    keyring.set_password(self.service_name, "encryption_key", key)
+                    logger.info("Generated new encryption key in keyring")
+            except Exception as e:
+                logger.warning(f"Keyring failed, using environment variable: {e}")
+                key = os.environ.get("ENCRYPTION_KEY")
+                if not key:
+                    key = Fernet.generate_key().decode()
+                    logger.warning("Generated temporary encryption key (not persisted)")
+        else:
+            # Use environment variable or generate temporary key
+            key = os.environ.get("ENCRYPTION_KEY")
+            if not key:
+                key = Fernet.generate_key().decode()
+                logger.warning("Generated temporary encryption key (not persisted)")
         self.cipher = Fernet(key.encode())
         
     def save_token(self, token_data: Dict[str, Any]) -> None:
@@ -61,14 +80,18 @@ class TokenStore:
                 expires_at = datetime.now() + timedelta(seconds=token_data['expires_in'])
                 token_data['expires_at'] = expires_at.isoformat()
             
-            # Save to keyring (primary)
+            # Save to keyring (primary) if available
             token_json = json.dumps(token_data)
-            keyring.set_password(
-                self.service_name,
-                self.username,
-                token_json
-            )
-            logger.info("Token saved to keyring")
+            if KEYRING_AVAILABLE:
+                try:
+                    keyring.set_password(
+                        self.service_name,
+                        self.username,
+                        token_json
+                    )
+                    logger.info("Token saved to keyring")
+                except Exception as e:
+                    logger.warning(f"Failed to save to keyring: {e}")
             
             # Save encrypted to database (backup)
             try:
@@ -126,18 +149,26 @@ class TokenStore:
             Token data dict or None if not found
         """
         try:
-            # Try keyring first
-            token_json = keyring.get_password(self.service_name, self.username)
-            if token_json:
-                logger.debug("Token loaded from keyring")
-                return json.loads(token_json)
-                
+            # Try keyring first if available
+            if KEYRING_AVAILABLE:
+                try:
+                    token_json = keyring.get_password(self.service_name, self.username)
+                    if token_json:
+                        logger.debug("Token loaded from keyring")
+                        return json.loads(token_json)
+                except Exception as e:
+                    logger.warning(f"Failed to load from keyring: {e}")
+                    
             # Fallback to database
             token_data = self._load_from_database()
             if token_data:
-                # Restore to keyring for next time
-                keyring.set_password(self.service_name, self.username, json.dumps(token_data))
-                logger.info("Token restored from database backup")
+                # Restore to keyring for next time if available
+                if KEYRING_AVAILABLE:
+                    try:
+                        keyring.set_password(self.service_name, self.username, json.dumps(token_data))
+                        logger.info("Token restored from database backup to keyring")
+                    except Exception:
+                        pass
                 return token_data
                 
             logger.debug("No token found in storage")
@@ -210,12 +241,13 @@ class TokenStore:
             
     def delete_token(self) -> None:
         """Delete stored token from all locations."""
-        try:
-            # Delete from keyring
-            keyring.delete_password(self.service_name, self.username)
-            logger.info("Token deleted from keyring")
-        except Exception as e:
-            logger.warning(f"Failed to delete token from keyring: {e}")
+        # Delete from keyring if available
+        if KEYRING_AVAILABLE:
+            try:
+                keyring.delete_password(self.service_name, self.username)
+                logger.info("Token deleted from keyring")
+            except Exception as e:
+                logger.warning(f"Failed to delete token from keyring: {e}")
             
         # Delete from database
         try:
@@ -267,8 +299,24 @@ class TokenStore:
         token_path = self.get_token_file_path()
         token_path.parent.mkdir(parents=True, exist_ok=True)
         
+        # Ensure token format is compatible with schwab-py
+        # schwab-py expects specific fields in the token
+        formatted_token = {
+            'access_token': token_data.get('access_token'),
+            'refresh_token': token_data.get('refresh_token'),
+            'token_type': token_data.get('token_type', 'Bearer'),
+            'expires_in': token_data.get('expires_in', 1800),
+            'scope': token_data.get('scope', ''),
+            'expires_at': token_data.get('expires_at'),
+            'refresh_token_expires_in': token_data.get('refresh_token_expires_in', 604800),  # 7 days
+            'refresh_token_expires_at': token_data.get('refresh_token_expires_at'),
+        }
+        
+        # Remove None values
+        formatted_token = {k: v for k, v in formatted_token.items() if v is not None}
+        
         with open(token_path, 'w') as f:
-            json.dump(token_data, f, indent=2)
+            json.dump(formatted_token, f, indent=2)
         logger.debug(f"Token saved to file: {token_path}")
         
     def load_from_file(self) -> Optional[Dict[str, Any]]:

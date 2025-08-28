@@ -32,6 +32,14 @@ class OrderStatus(Enum):
     REJECTED = "REJECTED"
 
 
+class TimeInForce(Enum):
+    """Time in force enumeration."""
+    DAY = "DAY"
+    GTC = "GTC"  # Good Till Cancelled
+    IOC = "IOC"  # Immediate Or Cancel
+    FOK = "FOK"  # Fill Or Kill
+
+
 class SignalStrength(Enum):
     """Signal strength levels."""
     WEAK = 0.3

@@ -48,7 +48,8 @@ class OAuthManager:
         self.client: Optional[Client] = None
         self._token_metadata: Optional[TokenMetadata] = None
         self._state: Optional[str] = None  # OAuth state for CSRF protection
-        self._code_verifier: Optional[str] = None  # PKCE code verifier
+        self._code_verifier: Optional[str] = None  # For PKCE flow
+        self._code_challenge: Optional[str] = None
     
     def get_authorization_url(self) -> str:
         """
@@ -66,6 +67,17 @@ class OAuthManager:
             hashlib.sha256(self._code_verifier.encode()).digest()
         ).decode('utf-8').rstrip('=')
         
+        # Store PKCE parameters temporarily for callback
+        pkce_file = Path("config/pkce_temp.json")
+        pkce_file.parent.mkdir(exist_ok=True)
+        with open(pkce_file, 'w') as f:
+            json.dump({
+                'state': self._state,
+                'code_verifier': self._code_verifier,
+                'timestamp': time.time()
+            }, f)
+        logger.info("Stored PKCE parameters temporarily")
+        
         # Build authorization URL
         params = {
             'response_type': 'code',
@@ -77,7 +89,8 @@ class OAuthManager:
         }
         
         auth_url = f"{self.AUTHORIZATION_URL}?{urlencode(params)}"
-        logger.info(f"Generated authorization URL: {auth_url[:50]}...")
+        logger.info(f"Generated authorization URL with callback URL: {self.settings.schwab.callback_url}")
+        logger.info(f"Authorization URL: {auth_url[:50]}...")
         
         return auth_url
     
@@ -153,6 +166,97 @@ class OAuthManager:
                 logger.error(f"Unexpected error during token exchange: {e}")
                 raise AuthenticationError(f"Token exchange error: {e}")
     
+    async def exchange_code_for_tokens(self, authorization_code: str) -> Optional[Client]:
+        """
+        Exchange authorization code for tokens and create client.
+        
+        Args:
+            authorization_code: The authorization code from OAuth callback
+            
+        Returns:
+            Schwab Client instance if successful, None otherwise
+            
+        Raises:
+            AuthenticationError: If code exchange fails
+        """
+        try:
+            # Load PKCE parameters from temporary storage
+            pkce_file = Path("config/pkce_temp.json")
+            if pkce_file.exists():
+                with open(pkce_file, 'r') as f:
+                    pkce_data = json.load(f)
+                    self._code_verifier = pkce_data.get('code_verifier')
+                    self._state = pkce_data.get('state')
+                    logger.info("Loaded PKCE parameters from temporary storage")
+                # Clean up the file after loading
+                pkce_file.unlink()
+            else:
+                logger.warning("PKCE parameters file not found - OAuth flow may have been interrupted")
+            
+            # Exchange code for token
+            # Try with Basic Auth for client credentials (OAuth2 standard)
+            import base64
+            auth_string = f"{self.settings.schwab.api_key}:{self.settings.schwab.app_secret}"
+            auth_bytes = base64.b64encode(auth_string.encode()).decode()
+            
+            token_data = {
+                'grant_type': 'authorization_code',
+                'code': authorization_code,
+                'redirect_uri': self.settings.schwab.callback_url,
+                'code_verifier': self._code_verifier
+            }
+            
+            headers = {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': f'Basic {auth_bytes}'
+            }
+            
+            # Debug logging
+            logger.info(f"Token exchange request:")
+            logger.info(f"  - URL: {self.TOKEN_URL}")
+            logger.info(f"  - Using Basic Auth for client credentials")
+            logger.info(f"  - client_id: {self.settings.schwab.api_key[:10]}...")
+            logger.info(f"  - redirect_uri: {token_data['redirect_uri']}")
+            logger.info(f"  - code: {token_data['code'][:20]}...")
+            logger.info(f"  - code_verifier: {token_data['code_verifier'][:20] if token_data['code_verifier'] else 'NONE'}...")
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.TOKEN_URL,
+                    data=token_data,
+                    headers=headers
+                )
+                
+                # Log response details before raising
+                if response.status_code != 200:
+                    logger.error(f"Token exchange failed with status {response.status_code}")
+                    logger.error(f"Response body: {response.text}")
+                
+                response.raise_for_status()
+                
+                token_response = response.json()
+                
+                # Add expiration timestamp
+                if 'expires_in' in token_response:
+                    expires_at = datetime.now() + timedelta(seconds=token_response['expires_in'])
+                    token_response['expires_at'] = expires_at.isoformat()
+                
+                # Save token
+                self.token_store.save_token(token_response)
+                
+                # Create client from token
+                self.client = await self._create_client_from_token(token_response)
+                
+                logger.info("Successfully exchanged code for token and created client")
+                return self.client
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Token exchange failed: {e.response.text}")
+            raise AuthenticationError(f"Token exchange failed: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error during token exchange: {e}")
+            raise AuthenticationError(f"Token exchange error: {e}")
+    
     async def refresh_access_token(self, retry_count: int = 3) -> Dict[str, Any]:
         """
         Refresh access token with retry logic and exponential backoff.
@@ -177,19 +281,26 @@ class OAuthManager:
         last_error = None
         for attempt in range(retry_count):
             try:
-                # Prepare refresh request
+                # Prepare refresh request with Basic Auth
+                import base64
+                auth_string = f"{self.settings.schwab.api_key}:{self.settings.schwab.app_secret}"
+                auth_bytes = base64.b64encode(auth_string.encode()).decode()
+                
                 refresh_data = {
                     'grant_type': 'refresh_token',
-                    'refresh_token': refresh_token,
-                    'client_id': self.settings.schwab.api_key,
-                    'client_secret': self.settings.schwab.app_secret
+                    'refresh_token': refresh_token
+                }
+                
+                headers = {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': f'Basic {auth_bytes}'
                 }
                 
                 async with httpx.AsyncClient() as client:
                     response = await client.post(
                         self.TOKEN_URL,
                         data=refresh_data,
-                        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                        headers=headers,
                         timeout=30.0
                     )
                     response.raise_for_status()
@@ -350,35 +461,12 @@ class OAuthManager:
         Raises:
             RuntimeError: If OAuth flow fails
         """
-        try:
-            callback_url = self.settings.schwab.callback_url
-            token_path = self.token_store.get_token_file_path()
-            
-            # schwab-py uses sync mode by default for OAuth flow
-            # We'll use the easy_client method
-            logger.info(f"Starting OAuth flow with callback URL: {callback_url}")
-            
-            # Use schwab-py's easy_client with correct parameters
-            # Note: easy_client is synchronous even when asyncio=True
-            client = auth.easy_client(
-                api_key=self.settings.schwab.api_key,
-                app_secret=self.settings.schwab.app_secret,
-                callback_url=callback_url,  # Fixed parameter name
-                token_path=str(token_path),
-                asyncio=True,
-                enforce_enums=True
-                # Note: interactive parameter removed - not supported in newer versions
-            )
-            
-            # Save token to our secure storage
-            await self._save_client_token(client)
-            
-            logger.info("OAuth flow completed successfully")
-            return client
-            
-        except Exception as e:
-            logger.error(f"OAuth flow failed: {e}")
-            raise RuntimeError(f"OAuth authentication failed: {e}")
+        # For non-interactive flow, we need the user to go through the web flow
+        # Return None to indicate authentication is needed via web
+        logger.info("OAuth authentication required - please use the web interface")
+        raise AuthenticationError(
+            "Authentication required. Please login via the web interface at http://localhost:3000/login"
+        )
             
     async def _create_client_from_token(self, token_data: Dict[str, Any]) -> Client:
         """
@@ -390,25 +478,30 @@ class OAuthManager:
         Returns:
             Client instance
         """
-        # Save token to file for schwab-py
-        self.token_store.save_to_file(token_data)
-        token_path = self.token_store.get_token_file_path()
-        
-        # Create client from token file
-        # Note: client_from_token_file is synchronous
-        client = auth.client_from_token_file(
-            token_path=str(token_path),
-            api_key=self.settings.schwab.api_key,
-            app_secret=self.settings.schwab.app_secret,
-            asyncio=True,
-            enforce_enums=True
-        )
-        
-        # Update our secure storage if token was refreshed
-        if hasattr(client, '_token') and client._token != token_data:
-            await self._save_client_token(client)
+        try:
+            # Save token to file for schwab-py
+            self.token_store.save_to_file(token_data)
+            token_path = self.token_store.get_token_file_path()
             
-        return client
+            # Create client from token file
+            # Note: client_from_token_file is synchronous
+            client = auth.client_from_token_file(
+                token_path=str(token_path),
+                api_key=self.settings.schwab.api_key,
+                app_secret=self.settings.schwab.app_secret,
+                asyncio=True,
+                enforce_enums=True
+            )
+            
+            # Update our secure storage if token was refreshed
+            if hasattr(client, '_token') and client._token != token_data:
+                await self._save_client_token(client)
+                
+            return client
+        except Exception as e:
+            logger.error(f"Failed to create client from token: {e}")
+            # If token format is invalid, we need to re-authenticate
+            raise AuthenticationError(f"Token format error: {e}")
         
     async def _save_client_token(self, client: Client) -> None:
         """

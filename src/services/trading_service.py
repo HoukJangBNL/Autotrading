@@ -21,9 +21,18 @@ class TradingService:
     async def initialize(self):
         """Initialize the service with authenticated client."""
         if not self._initialized:
-            self.client = await get_authenticated_client()
+            try:
+                self.client = await get_authenticated_client()
+                logger.info("TradingService initialized with authenticated client")
+            except Exception as e:
+                import os
+                if os.environ.get("ENVIRONMENT", "development") == "development":
+                    logger.warning(f"Failed to get authenticated client in development: {e}")
+                    logger.warning("TradingService initialized without authentication")
+                    self.client = None
+                else:
+                    raise
             self._initialized = True
-            logger.info("TradingService initialized")
     
     async def execute_order(
         self,

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Test - Schwab Trading System</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 { color: #4fc3f7; }
+        .card {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        button {
+            background: #4fc3f7;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover { background: #29b6f6; }
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        pre {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            border: 1px solid #333;
+        }
+        .success { color: #4caf50; }
+        .error { color: #f44336; }
+        .warning { color: #ff9800; }
+        .info { color: #2196f3; }
+        #status { margin-top: 20px; }
+        .step {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .step-number {
+            background: #4fc3f7;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .step.complete .step-number { background: #4caf50; }
+        .step.error .step-number { background: #f44336; }
+    </style>
+</head>
+<body>
+    <h1>🔐 Schwab OAuth Test</h1>
+    
+    <div class="card">
+        <h2>OAuth Flow Steps</h2>
+        <div id="steps">
+            <div class="step" id="step1">
+                <div class="step-number">1</div>
+                <div>Check OAuth configuration</div>
+            </div>
+            <div class="step" id="step2">
+                <div class="step-number">2</div>
+                <div>Get authorization URL</div>
+            </div>
+            <div class="step" id="step3">
+                <div class="step-number">3</div>
+                <div>Authorize with Schwab</div>
+            </div>
+            <div class="step" id="step4">
+                <div class="step-number">4</div>
+                <div>Handle callback</div>
+            </div>
+            <div class="step" id="step5">
+                <div class="step-number">5</div>
+                <div>Test authentication</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>Actions</h2>
+        <button onclick="checkConfig()">1. Check Config</button>
+        <button onclick="getAuthUrl()">2. Get Auth URL</button>
+        <button onclick="checkStatus()">3. Check Status</button>
+        <button onclick="testAuth()">4. Test Auth</button>
+        <button onclick="clearStorage()">Clear Storage</button>
+    </div>
+    
+    <div class="card">
+        <h2>Status</h2>
+        <div id="status">Ready to test OAuth flow...</div>
+    </div>
+    
+    <div class="card">
+        <h2>Response</h2>
+        <pre id="response">No response yet...</pre>
+    </div>
+
+    <script>
+        const API_BASE = 'https://127.0.0.1:8182/api';
+        
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.className = type;
+            status.innerHTML = `<span class="${type}">${new Date().toLocaleTimeString()}: ${message}</span>`;
+        }
+        
+        function updateResponse(data) {
+            document.getElementById('response').textContent = JSON.stringify(data, null, 2);
+        }
+        
+        function markStepComplete(stepId) {
+            document.getElementById(stepId).classList.add('complete');
+        }
+        
+        function markStepError(stepId) {
+            document.getElementById(stepId).classList.add('error');
+        }
+        
+        async function makeRequest(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Request failed');
+                }
+                
+                return data;
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`, 'error');
+                updateResponse({ error: error.message });
+                throw error;
+            }
+        }
+        
+        async function checkConfig() {
+            updateStatus('Checking OAuth configuration...', 'info');
+            try {
+                const data = await makeRequest('/auth/debug/oauth');
+                updateResponse(data);
+                
+                if (data.oauth_config.callback_url && data.oauth_config.api_key_prefix) {
+                    updateStatus('OAuth configuration looks good!', 'success');
+                    markStepComplete('step1');
+                    
+                    // Show important config info
+                    updateStatus(
+                        `Callback URL: ${data.oauth_config.callback_url}<br>` +
+                        `API Key: ${data.oauth_config.api_key_prefix}...<br>` +
+                        `Secret Set: ${data.oauth_config.app_secret_set}`,
+                        'info'
+                    );
+                } else {
+                    updateStatus('OAuth configuration incomplete', 'error');
+                    markStepError('step1');
+                }
+            } catch (error) {
+                markStepError('step1');
+            }
+        }
+        
+        async function getAuthUrl() {
+            updateStatus('Getting authorization URL...', 'info');
+            try {
+                const data = await makeRequest('/auth/login');
+                updateResponse(data);
+                
+                if (data.auth_url) {
+                    markStepComplete('step2');
+                    updateStatus('Authorization URL received! Opening in new window...', 'success');
+                    
+                    // Store the auth URL
+                    localStorage.setItem('auth_url', data.auth_url);
+                    
+                    // Open in new window
+                    const authWindow = window.open(data.auth_url, 'schwab_auth', 'width=600,height=700');
+                    
+                    // Check if window was blocked
+                    if (!authWindow) {
+                        updateStatus('Popup blocked! Click the link below:', 'warning');
+                        document.getElementById('response').innerHTML = 
+                            `<a href="${data.auth_url}" target="_blank" style="color: #4fc3f7;">Click here to authorize with Schwab</a>`;
+                    }
+                } else {
+                    updateStatus('Failed to get authorization URL', 'error');
+                    markStepError('step2');
+                }
+            } catch (error) {
+                markStepError('step2');
+            }
+        }
+        
+        async function checkStatus() {
+            updateStatus('Checking authentication status...', 'info');
+            try {
+                const data = await makeRequest('/auth/status');
+                updateResponse(data);
+                
+                if (data.is_authenticated) {
+                    updateStatus('✅ Authenticated successfully!', 'success');
+                    markStepComplete('step3');
+                    markStepComplete('step4');
+                } else {
+                    updateStatus('Not authenticated yet', 'warning');
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+        
+        async function testAuth() {
+            updateStatus('Testing authentication...', 'info');
+            try {
+                const data = await makeRequest('/account/info');
+                updateResponse(data);
+                
+                if (data.accounts && data.accounts.length > 0) {
+                    updateStatus(`✅ Authentication working! Found ${data.accounts.length} account(s)`, 'success');
+                    markStepComplete('step5');
+                } else {
+                    updateStatus('No accounts found', 'warning');
+                }
+            } catch (error) {
+                if (error.message.includes('401')) {
+                    updateStatus('Authentication required - please complete OAuth flow first', 'warning');
+                } else {
+                    markStepError('step5');
+                }
+            }
+        }
+        
+        function clearStorage() {
+            localStorage.clear();
+            sessionStorage.clear();
+            updateStatus('Storage cleared', 'info');
+            updateResponse({ message: 'Local and session storage cleared' });
+            
+            // Reset all steps
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('complete', 'error');
+            });
+        }
+        
+        // Check for callback parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+        const error = urlParams.get('error');
+        
+        if (code) {
+            updateStatus('OAuth callback detected! Processing...', 'info');
+            markStepComplete('step3');
+            updateResponse({ code: code.substring(0, 10) + '...', state: state });
+        } else if (error) {
+            updateStatus(`OAuth error: ${error}`, 'error');
+            markStepError('step3');
+            updateResponse({ error: error, description: urlParams.get('error_description') });
+        }
+        
+        // Auto-check config on load
+        window.onload = () => {
+            checkConfig();
+        };
+    </script>
+</body>
+</html>

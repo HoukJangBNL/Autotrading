@@ -19,9 +19,18 @@ class DataService:
     async def initialize(self):
         """Initialize the service with authenticated client."""
         if not self._initialized:
-            self.client = await get_authenticated_client()
+            try:
+                self.client = await get_authenticated_client()
+                logger.info("DataService initialized with authenticated client")
+            except Exception as e:
+                import os
+                if os.environ.get("ENVIRONMENT", "development") == "development":
+                    logger.warning(f"Failed to get authenticated client in development: {e}")
+                    logger.warning("DataService initialized without authentication")
+                    self.client = None
+                else:
+                    raise
             self._initialized = True
-            logger.info("DataService initialized")
     
     async def get_ticker_list(self) -> List[str]:
         """Get list of available tickers.

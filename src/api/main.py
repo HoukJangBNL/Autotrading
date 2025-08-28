@@ -9,15 +9,17 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+import redis.asyncio as redis
 from src.config import settings
 from src.utils.logger import setup_logging, logger
 from src.api import routers
-from src.api.websocket import websocket_endpoint, initialize_websocket_manager, manager as ws_manager
+from src.api.websocket import ConnectionManager, WebSocketHandler
 from src.auth import get_auth_service, AuthenticationError
 from src.data.database import db_service
 from src.services.data_service import DataService
 from src.services.strategy_service import StrategyService
 from src.services.trading_service import TradingService
+from src.api.portfolio_integration import get_portfolio_integration
 
 # Setup logging
 setup_logging()
@@ -26,6 +28,20 @@ setup_logging()
 data_service = DataService()
 strategy_service = StrategyService()
 trading_service = TradingService()
+portfolio_integration = get_portfolio_integration()
+
+# Redis client for WebSocket
+redis_client = redis.Redis(
+    host=settings.redis.host,
+    port=settings.redis.port,
+    db=settings.redis.db,
+    password=settings.redis.password if settings.redis.password else None,
+    decode_responses=True
+)
+
+# WebSocket manager
+ws_manager = ConnectionManager()
+websocket_handler = WebSocketHandler(ws_manager, redis_client)
 
 
 @asynccontextmanager
@@ -48,11 +64,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         await data_service.initialize()
         await strategy_service.initialize()
         await trading_service.initialize()
+        
+        # Initialize portfolio integration
+        await portfolio_integration.initialize()
+        await portfolio_integration.start_realtime_updates()
         logger.info("All services initialized")
         
-        # Initialize WebSocket manager
-        await initialize_websocket_manager()
-        logger.info("WebSocket manager initialized")
+        # WebSocket manager doesn't need initialization
+        logger.info("WebSocket manager ready")
         
     except Exception as e:
         logger.error(f"Failed to initialize services: {e}")
@@ -64,12 +83,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info("Shutting down trading system API...")
     
     try:
+        # Stop portfolio integration
+        await portfolio_integration.stop_realtime_updates()
+        
         # Cleanup services
         if auth_service.is_initialized():
             await auth_service.shutdown()
         
-        # Shutdown WebSocket manager
-        await ws_manager.shutdown()
+        # WebSocket manager cleanup (if needed)
+        # ws_manager doesn't have a shutdown method
         
         # Close database connections
         db_service.close()
@@ -93,7 +115,12 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=[
+        "http://localhost:3000",
+        "https://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://127.0.0.1:3000"
+    ],  # Frontend URLs (both HTTP and HTTPS)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -195,6 +222,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Health check endpoints
 @app.get("/health")
+@app.get("/api/health")
 async def health_check():
     """Basic health check endpoint."""
     return {
@@ -272,9 +300,25 @@ async def detailed_health_check():
 
 # Include API routers
 app.include_router(routers.auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(routers.account_router, prefix="/api/account", tags=["account"])
 app.include_router(routers.data_router, prefix="/api/data", tags=["data"])
-app.include_router(routers.strategy_router, prefix="/api/strategies", tags=["strategies"])
+app.include_router(routers.strategies_router, prefix="/api/strategies", tags=["strategies"])
+app.include_router(routers.backtest_router, prefix="/api/backtest", tags=["backtest"])
 app.include_router(routers.trading_router, prefix="/api/trading", tags=["trading"])
+app.include_router(routers.portfolio_router, prefix="/api/portfolio", tags=["portfolio"])
 
-# Add WebSocket endpoint
-app.add_websocket_route("/ws", websocket_endpoint)
+# WebSocket endpoint
+@app.websocket("/ws")
+async def websocket_endpoint(websocket):
+    """WebSocket endpoint for real-time data streaming."""
+    client_id = await ws_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive and handle messages
+            data = await websocket.receive_text()
+            # Handle incoming messages if needed
+            logger.debug(f"Received message from {client_id}: {data}")
+    except Exception as e:
+        logger.error(f"WebSocket error for client {client_id}: {e}")
+    finally:
+        ws_manager.disconnect(client_id)

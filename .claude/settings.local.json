@@ -32,7 +32,14 @@
       "Bash(cat:*)",
       "Bash(curl:*)",
       "Bash(chmod:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(git push:*)",
+      "Bash(touch:*)",
+      "Bash(npx create-react-app:*)",
+      "Bash(npm install:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_close",
+      "WebSearch"
     ],
     "deny": []
   }

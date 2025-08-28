@@ -44,21 +44,41 @@ class AuthService:
         logger.info("Initializing authentication service")
         
         try:
-            # Perform initial authentication
-            self.client = await self.oauth_manager.authenticate()
+            # Try to load existing token first
+            token = self.oauth_manager.token_store.load_token()
+            if token and self.oauth_manager.token_store.is_token_valid():
+                logger.info("Using existing valid token")
+                self.client = await self.oauth_manager.authenticate()
+            else:
+                # In container/development mode, skip authentication if no token exists
+                import os
+                if os.environ.get("ENVIRONMENT", "development") == "development":
+                    logger.warning("No valid token found, skipping authentication in development mode")
+                    logger.warning("Please authenticate manually via the /api/auth/login endpoint")
+                    self.client = None
+                else:
+                    # Perform initial authentication
+                    self.client = await self.oauth_manager.authenticate()
             
-            # Start background refresh task
-            self._refresh_task = asyncio.create_task(
-                self._token_refresh_loop(),
-                name="token_refresh"
-            )
+            # Start background refresh task only if we have a client
+            if self.client:
+                self._refresh_task = asyncio.create_task(
+                    self._token_refresh_loop(),
+                    name="token_refresh"
+                )
             
             self._initialized = True
             logger.info("Authentication service initialized successfully")
             
         except Exception as e:
             logger.error(f"Failed to initialize authentication service: {e}")
-            raise RuntimeError(f"Authentication initialization failed: {e}")
+            # In development, don't fail completely
+            import os
+            if os.environ.get("ENVIRONMENT", "development") == "development":
+                logger.warning("Authentication failed in development mode, continuing without auth")
+                self._initialized = True
+            else:
+                raise RuntimeError(f"Authentication initialization failed: {e}")
             
     async def _token_refresh_loop(self) -> None:
         """
@@ -189,6 +209,40 @@ class AuthService:
             # Could add cleanup here if needed
             pass
             
+    def get_auth_url(self) -> str:
+        """
+        Generate OAuth authorization URL.
+        
+        Returns:
+            OAuth authorization URL for Schwab
+        """
+        return self.oauth_manager.get_authorization_url()
+    
+    async def exchange_code_for_token(self, authorization_code: str) -> Dict[str, Any]:
+        """
+        Exchange authorization code for access and refresh tokens.
+        
+        Args:
+            authorization_code: Code received from OAuth callback
+            
+        Returns:
+            Token data dictionary
+        """
+        # Exchange code for tokens
+        self.client = await self.oauth_manager.exchange_code_for_tokens(authorization_code)
+        self._initialized = True
+        
+        # Start token refresh task
+        if self.client:
+            self._refresh_task = asyncio.create_task(
+                self._token_refresh_loop(),
+                name="token_refresh"
+            )
+        
+        # Return token info
+        token = self.oauth_manager.token_store.load_token()
+        return token if token else {}
+    
     async def test_authentication(self) -> Dict[str, Any]:
         """
         Test authentication and return account info.
@@ -234,6 +288,20 @@ class AuthService:
     def has_valid_client(self) -> bool:
         """Check if we have a valid client."""
         return self._initialized and self.client is not None
+    
+    @property
+    def token_store(self):
+        """Access to token store through oauth manager."""
+        return self.oauth_manager.token_store
+    
+    @property
+    def token_manager(self):
+        """Alias for token_store for compatibility."""
+        return self.oauth_manager.token_store
+    
+    def is_authenticated(self) -> bool:
+        """Check if we have valid authentication."""
+        return self.has_valid_client()
 
 
 # Singleton instance
