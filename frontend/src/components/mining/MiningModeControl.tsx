@@ -60,10 +60,12 @@ interface MiningModeStatus {
 
 export const MiningModeControl: React.FC = () => {
   const theme = useTheme();
-  const [miningMode, setMiningMode] = useState<'gap_filling' | 'expansion' | 'auto'>('auto');
+  const [miningMode, setMiningMode] = useState<'gap_filling' | 'expansion' | 'auto'>('gap_filling');
   const [gapFillingFirst, setGapFillingFirst] = useState(true);
   const [switchOnCompletion, setSwitchOnCompletion] = useState(true);
   const [lookbackDays, setLookbackDays] = useState(60);
+  const [expansionLimit, setExpansionLimit] = useState(500);
+  const [unlimitedExpansion, setUnlimitedExpansion] = useState(false);
   const [status, setStatus] = useState<MiningModeStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,11 +94,19 @@ export const MiningModeControl: React.FC = () => {
     setError(null);
     
     try {
+      // Determine lookback days based on mode
+      let actualLookbackDays = lookbackDays;
+      if (miningMode === 'gap_filling') {
+        // Gap filling: from last data to current (dynamically determined by backend)
+        actualLookbackDays = 0; // 0 means use dynamic calculation
+      }
+      
       const params = new URLSearchParams({
         mode: miningMode,
-        days_back: lookbackDays.toString(),
+        days_back: actualLookbackDays.toString(),
         gap_filling_first: gapFillingFirst.toString(),
         switch_on_completion: switchOnCompletion.toString(),
+        expansion_limit: unlimitedExpansion ? '0' : expansionLimit.toString(),
       });
       
       const response = await fetch(`/api/mining/v2/start-with-mode?${params}`, {
@@ -208,7 +218,7 @@ export const MiningModeControl: React.FC = () => {
         {/* Mode Selection */}
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle2" gutterBottom>
-            Select Mining Mode
+            Mining Mode
           </Typography>
           <ToggleButtonGroup
             value={miningMode}
@@ -216,75 +226,124 @@ export const MiningModeControl: React.FC = () => {
             onChange={(e, value) => value && setMiningMode(value)}
             fullWidth
             disabled={status?.is_running}
+            size="small"
           >
             <ToggleButton value="gap_filling">
-              <Stack direction="row" spacing={1} alignItems="center">
-                <GapIcon />
-                <span>Gap Filling</span>
+              <Stack direction="column" spacing={0.5} alignItems="center" sx={{ py: 1 }}>
+                <GapIcon fontSize="small" />
+                <Typography variant="caption">Gap Filling</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                  Fill missing data
+                </Typography>
               </Stack>
             </ToggleButton>
             <ToggleButton value="expansion">
-              <Stack direction="row" spacing={1} alignItems="center">
-                <ExpansionIcon />
-                <span>Expansion</span>
-              </Stack>
-            </ToggleButton>
-            <ToggleButton value="auto">
-              <Stack direction="row" spacing={1} alignItems="center">
-                <AutoIcon />
-                <span>Auto</span>
+              <Stack direction="column" spacing={0.5} alignItems="center" sx={{ py: 1 }}>
+                <ExpansionIcon fontSize="small" />
+                <Typography variant="caption">Expansion</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                  Add new symbols
+                </Typography>
               </Stack>
             </ToggleButton>
           </ToggleButtonGroup>
+          
+          {/* Mode Description */}
+          <Paper variant="outlined" sx={{ p: 1.5, mt: 2, bgcolor: 'background.default' }}>
+            {miningMode === 'gap_filling' && (
+              <Typography variant="body2" color="text.secondary">
+                <strong>Gap Filling:</strong> Automatically detects and fills missing data gaps from the last available data point to the current date for your portfolio symbols (48 stocks).
+              </Typography>
+            )}
+            {miningMode === 'expansion' && (
+              <Typography variant="body2" color="text.secondary">
+                <strong>Expansion:</strong> Collects historical data for new symbols from the entire US stock market (11,600+ symbols). Default period is 2 months.
+              </Typography>
+            )}
+          </Paper>
         </Box>
         
-        {/* Auto Mode Options */}
-        {miningMode === 'auto' && (
+        {/* Expansion Mode Options */}
+        {miningMode === 'expansion' && (
           <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Expansion Settings
+            </Typography>
+            
             <FormControlLabel
               control={
                 <Switch
-                  checked={gapFillingFirst}
-                  onChange={(e) => setGapFillingFirst(e.target.checked)}
+                  checked={unlimitedExpansion}
+                  onChange={(e) => setUnlimitedExpansion(e.target.checked)}
                   disabled={status?.is_running}
+                  color="warning"
                 />
               }
-              label="Start with Gap Filling mode"
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={switchOnCompletion}
-                  onChange={(e) => setSwitchOnCompletion(e.target.checked)}
-                  disabled={status?.is_running}
-                />
+              label={
+                <Stack>
+                  <Typography variant="body2">Unlimited Expansion</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Process all 11,600+ US stocks (may take several hours)
+                  </Typography>
+                </Stack>
               }
-              label="Auto-switch on completion"
+              sx={{ mb: 2 }}
             />
+            
+            {!unlimitedExpansion && (
+              <Box>
+                <Typography variant="body2" gutterBottom>
+                  Symbol Limit: {expansionLimit.toLocaleString()} stocks
+                </Typography>
+                <Slider
+                  value={expansionLimit}
+                  onChange={(e, value) => setExpansionLimit(value as number)}
+                  min={10}
+                  max={5000}
+                  step={10}
+                  marks={[
+                    { value: 100, label: '100' },
+                    { value: 500, label: '500' },
+                    { value: 1000, label: '1K' },
+                    { value: 2500, label: '2.5K' },
+                    { value: 5000, label: '5K' },
+                  ]}
+                  disabled={status?.is_running || unlimitedExpansion}
+                  valueLabelDisplay="auto"
+                />
+                <Typography variant="caption" color="text.secondary">
+                  Processes S&P 100 and NASDAQ 100 symbols first, then others alphabetically
+                </Typography>
+              </Box>
+            )}
           </Box>
         )}
         
-        {/* Lookback Days */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Lookback Days: {lookbackDays}
-          </Typography>
-          <Slider
-            value={lookbackDays}
-            onChange={(e, value) => setLookbackDays(value as number)}
-            min={7}
-            max={365}
-            step={7}
-            marks={[
-              { value: 7, label: '1W' },
-              { value: 30, label: '1M' },
-              { value: 60, label: '2M' },
-              { value: 180, label: '6M' },
-              { value: 365, label: '1Y' },
-            ]}
-            disabled={status?.is_running}
-          />
-        </Box>
+        {/* Data Period Settings */}
+        {miningMode === 'expansion' && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Historical Data Period: {lookbackDays} days
+            </Typography>
+            <Slider
+              value={lookbackDays}
+              onChange={(e, value) => setLookbackDays(value as number)}
+              min={7}
+              max={365}
+              step={7}
+              marks={[
+                { value: 7, label: '1W' },
+                { value: 30, label: '1M' },
+                { value: 60, label: '2M' },
+                { value: 90, label: '3M' },
+                { value: 180, label: '6M' },
+                { value: 365, label: '1Y' },
+              ]}
+              disabled={status?.is_running}
+              valueLabelDisplay="auto"
+            />
+          </Box>
+        )}
         
         {/* Control Buttons */}
         <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
@@ -311,17 +370,6 @@ export const MiningModeControl: React.FC = () => {
               >
                 Stop Mining
               </Button>
-              {status?.configuration?.mode === 'auto' && (
-                <Button
-                  variant="outlined"
-                  startIcon={<SwitchIcon />}
-                  onClick={handleSwitchMode}
-                  disabled={loading}
-                  fullWidth
-                >
-                  Switch Mode
-                </Button>
-              )}
             </>
           )}
         </Stack>
@@ -335,13 +383,13 @@ export const MiningModeControl: React.FC = () => {
               Current Status
             </Typography>
             
-            <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
+            <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'background.default' }}>
+              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
                 <Chip
                   icon={getModeIcon(status.current_mode)}
                   label={status.current_mode.replace('_', ' ').toUpperCase()}
-                  color="primary"
-                  size="small"
+                  color={status.is_running ? 'success' : 'default'}
+                  variant={status.is_running ? 'filled' : 'outlined'}
                 />
                 {status.session.current_operation && (
                   <Typography variant="body2" color="text.secondary">

@@ -23,9 +23,10 @@ orchestrator: Optional[EnhancedMiningOrchestrator] = None
 async def start_mining_with_mode(
     background_tasks: BackgroundTasks,
     mode: str = Query("auto", description="Mining mode: gap_filling, expansion, or auto"),
-    days_back: int = Query(60, ge=1, le=365, description="Days of history"),
+    days_back: int = Query(60, ge=0, le=365, description="Days of history (0 for dynamic gap filling)"),
     gap_filling_first: bool = Query(True, description="In auto mode, start with gap filling"),
     switch_on_completion: bool = Query(True, description="In auto mode, switch modes on completion"),
+    expansion_limit: int = Query(500, ge=0, le=10000, description="Max symbols for expansion (0=unlimited)"),
 ):
     """Start mining with specific mode configuration."""
     global orchestrator
@@ -70,16 +71,40 @@ async def start_mining_with_mode(
         # Create new orchestrator with mode config
         orchestrator = EnhancedMiningOrchestrator(client, mode_config)
         
-        # Get symbols from phase manager (use phase 1 for now)
-        phase_manager = PhaseManager()
-        symbols = phase_manager.get_symbols_for_phase(1, cumulative=True)
+        # Store expansion limit in orchestrator for use during execution
+        orchestrator.expansion_limit = expansion_limit if expansion_limit > 0 else None
+        
+        # Don't pass symbols - let the orchestrator determine them based on mode
+        # This allows Gap Filling to use portfolio symbols and Expansion to use all US stocks
         
         # Start mining in background
         background_tasks.add_task(
             orchestrator.execute_mining_with_modes,
-            symbols,
+            None,  # Let orchestrator determine symbols based on mode
             days_back
         )
+        
+        # Get symbol count based on mode for response
+        phase_manager = PhaseManager()
+        actual_expansion_limit = expansion_limit if expansion_limit > 0 else None
+        
+        if mining_mode == MiningMode.GAP_FILLING:
+            symbol_count = len(phase_manager.get_symbols_for_mode(MiningMode.GAP_FILLING))
+            symbol_info = "portfolio symbols"
+        elif mining_mode == MiningMode.EXPANSION:
+            # Use configured expansion limit
+            expansion_symbols = phase_manager.get_symbols_for_mode(MiningMode.EXPANSION, priority_limit=actual_expansion_limit)
+            symbol_count = len(expansion_symbols)
+            if actual_expansion_limit:
+                symbol_info = f"prioritized US stock symbols (limited to {actual_expansion_limit})"
+            else:
+                symbol_info = f"all available US stock symbols ({symbol_count} total)"
+        else:  # AUTO mode
+            gap_count = len(phase_manager.get_symbols_for_mode(MiningMode.GAP_FILLING))
+            expansion_symbols = phase_manager.get_symbols_for_mode(MiningMode.EXPANSION, priority_limit=actual_expansion_limit)
+            expansion_count = len(expansion_symbols)
+            symbol_count = gap_count if gap_filling_first else expansion_count
+            symbol_info = f"starting with {gap_count} portfolio symbols then {expansion_count} expansion symbols"
         
         return {
             "status": "started",
@@ -90,7 +115,8 @@ async def start_mining_with_mode(
                 "switch_on_completion": switch_on_completion,
                     "lookback_days": days_back
                 },
-                "symbols_count": len(symbols),
+                "symbols_count": symbol_count,
+                "symbols_info": symbol_info,
                 "timestamp": datetime.now().isoformat()
             }
         

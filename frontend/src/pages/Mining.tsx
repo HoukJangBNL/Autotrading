@@ -1,25 +1,26 @@
 import React from 'react';
-import { Container, Grid, Typography } from '@mui/material';
-import MiningDashboard from '../components/mining/MiningDashboard';
+import { Container, Grid, Typography, Box } from '@mui/material';
 import { MiningModeControl } from '../components/mining/MiningModeControl';
-import { MiningMonitor } from '../components/mining/MiningMonitor';
+import { SimpleMiningMonitor } from '../components/mining/SimpleMiningMonitor';
 
 const Mining: React.FC = () => {
   return (
     <Container maxWidth="xl">
-      <Typography variant="h4" fontWeight="bold" gutterBottom>
-        Data Mining
-      </Typography>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" fontWeight="bold" gutterBottom>
+          Data Mining
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Manage historical data collection for portfolio optimization and market analysis
+        </Typography>
+      </Box>
       
       <Grid container spacing={3}>
-        <Grid item xs={12} lg={4}>
+        <Grid item xs={12} lg={5}>
           <MiningModeControl />
         </Grid>
-        <Grid item xs={12} lg={8}>
-          <MiningMonitor />
-        </Grid>
-        <Grid item xs={12}>
-          <MiningDashboard />
+        <Grid item xs={12} lg={7}>
+          <SimpleMiningMonitor />
         </Grid>
       </Grid>
     </Container>

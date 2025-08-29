@@ -57,6 +57,18 @@ class PhaseManager:
                 return set(data.get("symbols", []))
         return set()
     
+    def _load_all_us_stocks(self) -> Set[str]:
+        """Load all US stock symbols for expansion mode."""
+        config_file = CONFIG_PATH / "all_us_stocks_symbols.json"
+        if config_file.exists():
+            with open(config_file, 'r') as f:
+                data = json.load(f)
+                all_symbols = set(data.get("symbols", []))
+                logger.info(f"Loaded {len(all_symbols)} total US stock symbols")
+                return all_symbols
+        logger.warning("all_us_stocks_symbols.json not found")
+        return set()
+    
     def _get_combined_symbols(self) -> Dict[int, Set[str]]:
         """Get combined unique symbols for each phase."""
         phase_1 = self.phases[1]
@@ -98,6 +110,58 @@ class PhaseManager:
                 "cumulative_symbols": len(self.combined_symbols[3])
             }
         }
+    
+    def get_symbols_for_mode(self, mode: MiningMode, priority_limit: Optional[int] = None) -> List[str]:
+        """Get symbols based on mining mode.
+        
+        Args:
+            mode: The mining mode (GAP_FILLING or EXPANSION)
+            priority_limit: Optional limit for number of symbols (for testing or batching)
+        
+        Returns:
+            List of symbols appropriate for the mode
+        """
+        if mode == MiningMode.GAP_FILLING:
+            # For gap filling, use existing portfolio symbols (Phase 1)
+            symbols = list(self.combined_symbols[1])
+            logger.info(f"Gap filling mode: Using {len(symbols)} portfolio symbols")
+            return symbols
+            
+        elif mode == MiningMode.EXPANSION:
+            # For expansion, use all US stocks minus already processed symbols
+            all_stocks = self._load_all_us_stocks()
+            existing_symbols = self.combined_symbols[3]  # All phase symbols
+            
+            # Get new symbols not in existing portfolio
+            new_symbols = all_stocks - existing_symbols
+            
+            # Prioritize by market cap/popularity (using predefined lists)
+            priority_symbols = []
+            
+            # First add remaining S&P 100 and NASDAQ 100 symbols
+            sp100_remaining = self.phases[2] - existing_symbols
+            nasdaq100_remaining = self.phases[3] - existing_symbols
+            
+            priority_symbols.extend(list(sp100_remaining))
+            priority_symbols.extend(list(nasdaq100_remaining))
+            
+            # Then add other symbols
+            other_symbols = new_symbols - sp100_remaining - nasdaq100_remaining
+            priority_symbols.extend(sorted(list(other_symbols)))
+            
+            # Apply limit if specified
+            if priority_limit and priority_limit < len(priority_symbols):
+                priority_symbols = priority_symbols[:priority_limit]
+                logger.info(f"Expansion mode: Limited to {priority_limit} symbols")
+            else:
+                logger.info(f"Expansion mode: Using {len(priority_symbols)} new symbols from {len(all_stocks)} total")
+            
+            return priority_symbols
+            
+        else:  # AUTO mode
+            # For auto mode, return Phase 1 symbols initially
+            # The orchestrator will handle mode switching
+            return list(self.combined_symbols[1])
 
 
 class EnhancedMiningOrchestrator:
@@ -124,6 +188,7 @@ class EnhancedMiningOrchestrator:
         self.current_phase = 1
         self.max_phase = 3
         self.auto_advance = False  # Auto-advance to next phase
+        self.expansion_limit = None  # Optional limit for expansion mode symbols
         
         self.progress = {
             'phase': 1,
@@ -146,11 +211,21 @@ class EnhancedMiningOrchestrator:
         }
         
     async def execute_gap_filling_mode(self, symbols: List[str], days_back: int = 60):
-        """Execute gap filling mode - fill missing data in existing records."""
+        """Execute gap filling mode - fill missing data in existing records.
+        
+        Args:
+            symbols: List of symbols to check for gaps
+            days_back: Number of days to look back (0 means dynamic from last data to current)
+        """
         logger.info(f"Starting gap filling mode for {len(symbols)} symbols")
         
         self.mining_session.current_operation = "Gap Filling"
         self.mining_session.total_symbols = len(symbols)
+        
+        # If days_back is 0, use dynamic gap detection (from last data to current)
+        if days_back == 0:
+            # Dynamic gap detection will be handled per symbol in _identify_symbols_with_gaps
+            logger.info("Using dynamic gap detection (from last data to current)")
         
         # Prioritize symbols with known gaps
         symbols_with_gaps = await self._identify_symbols_with_gaps(symbols, days_back)
@@ -242,40 +317,64 @@ class EnhancedMiningOrchestrator:
         self.mining_session.expansion_completed = True
         logger.info(f"Expansion completed. Collected {self.mining_session.data_points_collected} data points")
     
-    async def execute_mining_with_modes(self, symbols: List[str], days_back: int = 60):
-        """Execute mining with mode management."""
+    async def execute_mining_with_modes(self, symbols: Optional[List[str]] = None, days_back: int = 60):
+        """Execute mining with mode management.
+        
+        Args:
+            symbols: Optional list of symbols. If not provided, will be determined based on mode.
+            days_back: Number of days to look back for data collection.
+        """
         self.is_running = True
         self.mining_session.start_time = datetime.now()
         
+        # Get PhaseManager to determine symbols based on mode
+        phase_manager = PhaseManager()
+        
         try:
             if self.mining_session.config.mode == MiningMode.GAP_FILLING:
-                # Gap filling mode only
-                await self.execute_gap_filling_mode(symbols, days_back)
+                # Gap filling mode only - use portfolio symbols
+                gap_symbols = symbols or phase_manager.get_symbols_for_mode(MiningMode.GAP_FILLING)
+                await self.execute_gap_filling_mode(gap_symbols, days_back)
                 
             elif self.mining_session.config.mode == MiningMode.EXPANSION:
-                # Expansion mode only
-                await self.execute_expansion_mode(symbols, days_back)
+                # Expansion mode only - use all US stocks (with optional limit)
+                expansion_symbols = symbols or phase_manager.get_symbols_for_mode(
+                    MiningMode.EXPANSION, 
+                    priority_limit=self.expansion_limit  # Use configured limit or None for all
+                )
+                await self.execute_expansion_mode(expansion_symbols, days_back)
                 
             elif self.mining_session.config.mode == MiningMode.AUTO:
-                # Auto mode - switch between gap filling and expansion
+                # Auto mode - switch between gap filling and expansion with appropriate symbols
                 if self.mining_session.config.gap_filling_first:
-                    # Start with gap filling
+                    # Start with gap filling using portfolio symbols
                     self.mining_session.current_mode = MiningMode.GAP_FILLING
-                    await self.execute_gap_filling_mode(symbols, days_back)
+                    gap_symbols = phase_manager.get_symbols_for_mode(MiningMode.GAP_FILLING)
+                    await self.execute_gap_filling_mode(gap_symbols, days_back)
                     
-                    # Check if should switch
+                    # Check if should switch to expansion
                     if self.mining_session.should_switch_mode():
                         self.mining_session.switch_mode()
-                        await self.execute_expansion_mode(symbols, days_back)
+                        # Use all US stocks for expansion
+                        expansion_symbols = phase_manager.get_symbols_for_mode(
+                            MiningMode.EXPANSION,
+                            priority_limit=self.expansion_limit  # Use configured limit
+                        )
+                        await self.execute_expansion_mode(expansion_symbols, days_back)
                 else:
-                    # Start with expansion
+                    # Start with expansion using all US stocks
                     self.mining_session.current_mode = MiningMode.EXPANSION
-                    await self.execute_expansion_mode(symbols, days_back)
+                    expansion_symbols = phase_manager.get_symbols_for_mode(
+                        MiningMode.EXPANSION,
+                        priority_limit=self.expansion_limit  # Use configured limit
+                    )
+                    await self.execute_expansion_mode(expansion_symbols, days_back)
                     
-                    # Check if should switch
+                    # Check if should switch to gap filling
                     if self.mining_session.should_switch_mode():
                         self.mining_session.switch_mode()
-                        await self.execute_gap_filling_mode(symbols, days_back)
+                        gap_symbols = phase_manager.get_symbols_for_mode(MiningMode.GAP_FILLING)
+                        await self.execute_gap_filling_mode(gap_symbols, days_back)
         
         except Exception as e:
             logger.error(f"Mining execution error: {e}")
@@ -408,7 +507,7 @@ class EnhancedMiningOrchestrator:
                     .where(MiningStatus.symbol == symbol)
                 ).scalar()
                 
-                if not status or status.oldest_data is None or status.oldest_data > cutoff_date:
+                if not status or status.first_date is None or status.first_date > cutoff_date:
                     symbols_to_expand.append(symbol)
         
         return symbols_to_expand
