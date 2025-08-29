@@ -34,6 +34,7 @@ import {
   Logout as LogoutIcon,
   Settings as SettingsIcon,
   ChevronLeft as ChevronLeftIcon,
+  CloudDownload as CloudDownloadIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -58,6 +59,11 @@ const menuItems: MenuItemType[] = [
     title: 'Market Data',
     path: '/market',
     icon: <ShowChartIcon />,
+  },
+  {
+    title: 'Data Mining',
+    path: '/mining',
+    icon: <CloudDownloadIcon />,
   },
   {
     title: 'Strategies',
@@ -310,7 +316,8 @@ export const MainLayout: React.FC = () => {
           flexGrow: 1,
           p: 3,
           width: { sm: `calc(100% - ${miniDrawer ? miniDrawerWidth : drawerWidth}px)` },
-          minHeight: '100vh',
+          height: '100vh',
+          overflow: 'auto',
           backgroundColor: (theme) =>
             theme.palette.mode === 'light'
               ? theme.palette.grey[100]

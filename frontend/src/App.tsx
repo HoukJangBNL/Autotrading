@@ -20,6 +20,7 @@ import {
 } from './pages';
 import { AuthSuccess } from './pages/AuthSuccess';
 import { AuthError } from './pages/AuthError';
+import Mining from './pages/Mining';
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="market" element={<MarketData />} />
+                <Route path="mining" element={<Mining />} />
                 <Route path="strategies" element={<Strategies />} />
                 <Route path="backtest" element={<Backtest />} />
                 <Route path="trading" element={<Trading />} />

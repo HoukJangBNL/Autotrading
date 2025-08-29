@@ -12,6 +12,7 @@ import backtestReducer from '../features/backtest/backtestSlice';
 import tradingReducer from '../features/trading/tradingSlice';
 import portfolioReducer from '../features/portfolio/portfolioSlice';
 import websocketReducer from '../features/websocket/websocketSlice';
+import modeReducer from '../features/mode/modeSlice';
 
 export const store = configureStore({
   reducer: {
@@ -23,6 +24,7 @@ export const store = configureStore({
     trading: tradingReducer,
     portfolio: portfolioReducer,
     websocket: websocketReducer,
+    mode: modeReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -39,7 +39,25 @@
       "Bash(npm install:*)",
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_close",
-      "WebSearch"
+      "WebSearch",
+      "Bash(npm start)",
+      "Bash(uvicorn:*)",
+      "Bash(alembic downgrade:*)",
+      "Bash(sqlite3:*)",
+      "Bash(brew services:*)",
+      "Bash(/usr/local/opt/postgresql@16/bin/psql:*)",
+      "Bash(DATABASE_URL=postgresql://houkjang@localhost/autotrading alembic upgrade head)",
+      "Bash(DATABASE_URL=postgresql://houkjang@localhost/autotrading alembic heads)",
+      "Bash(DATABASE_URL=postgresql://houkjang@localhost/autotrading alembic upgrade market_data_001)",
+      "Bash(DATABASE_URL=postgresql://houkjang@localhost/autotrading alembic upgrade 525b4f6a1fc6)",
+      "Bash(DATABASE_URL=postgresql://houkjang@localhost/autotrading alembic current)",
+      "Bash(DATABASE_URL=postgresql://houkjang@localhost/autotrading alembic history)",
+      "Bash(./start_services.sh:*)",
+      "Bash(pg_isready:*)",
+      "Bash(/dev/null)",
+      "Bash(kill:*)",
+      "Bash(./start_backend.sh:*)",
+      "Bash(./generate_certs.sh:*)"
     ],
     "deny": []
   }

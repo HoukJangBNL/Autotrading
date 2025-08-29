@@ -306,6 +306,14 @@ app.include_router(routers.strategies_router, prefix="/api/strategies", tags=["s
 app.include_router(routers.backtest_router, prefix="/api/backtest", tags=["backtest"])
 app.include_router(routers.trading_router, prefix="/api/trading", tags=["trading"])
 app.include_router(routers.portfolio_router, prefix="/api/portfolio", tags=["portfolio"])
+app.include_router(routers.data_mining_router, prefix="/api/data-mining", tags=["data-mining"])
+app.include_router(routers.mining_router, tags=["mining"])  # Note: prefix already in router definition
+
+# Import and include historical mining routers
+from src.api.routers import historical_mining
+from src.api.routers import historical_mining_v2
+app.include_router(historical_mining.router)
+app.include_router(historical_mining_v2.router)
 
 # WebSocket endpoint
 @app.websocket("/ws")

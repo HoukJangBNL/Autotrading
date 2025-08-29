@@ -1,7 +1,11 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { store } from '../store/store';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://127.0.0.1:8182';
+// In development, use relative URLs to work with proxy
+// In production, use the full URL
+const API_BASE_URL = process.env.NODE_ENV === 'development' 
+  ? '' // Empty string for relative URLs in development
+  : (process.env.REACT_APP_API_URL || 'https://127.0.0.1:8182');
 const API_PREFIX = '/api';
 
 // Create axios instance with default config

@@ -7,6 +7,8 @@ from .backtest import router as backtest_router
 from .trading import router as trading_router
 from .portfolio import router as portfolio_router
 from .account import router as account_router
+from .data_mining import router as data_mining_router
+from .mining import router as mining_router
 
 __all__ = [
     "auth_router",
@@ -16,4 +18,6 @@ __all__ = [
     "trading_router",
     "portfolio_router",
     "account_router",
+    "data_mining_router",
+    "mining_router",
 ]

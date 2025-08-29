@@ -166,6 +166,9 @@ backups/
 # Schwab API credentials
 config/credentials.json
 config/api_keys.json
+config/schwab_token.json
+**/schwab_token.json
+**/*token*.json
 
 # Trading data
 data/historical/

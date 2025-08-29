@@ -1,52 +1,161 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  Box,
-  Typography,
-  Grid,
-  Container,
-  Fade,
-} from '@mui/material';
-import { useNavigate } from 'react-router-dom';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
+import React, { useEffect, useState } from 'react';
 import { 
-  fetchPortfolioSummary, 
-  fetchPortfolioPositions 
-} from '../features/portfolio/portfolioSlice';
-import { fetchActiveStrategies } from '../features/strategies/strategiesSlice';
-import { fetchRecentTrades } from '../features/trading/tradingSlice';
-import { DashboardCard } from '../components/dashboard/DashboardCard';
-import { PositionsWidget } from '../components/dashboard/PositionsWidget';
-import { StrategiesWidget } from '../components/dashboard/StrategiesWidget';
-import { RecentTradesWidget } from '../components/dashboard/RecentTradesWidget';
-import { MiniChart } from '../components/dashboard/MiniChart';
-import { usePortfolioUpdates, useStrategyUpdates } from '../hooks/useWebSocket';
-import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import ShowChartIcon from '@mui/icons-material/ShowChart';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+  Container, 
+  Box, 
+  Grid, 
+  Typography, 
+  Paper, 
+  Card,
+  CardContent,
+  Stack,
+  Chip,
+  LinearProgress,
+  IconButton,
+  Tooltip,
+  alpha,
+  useTheme,
+  Fade,
+  Collapse,
+  Skeleton,
+} from '@mui/material';
+import {
+  TrendingUp as TrendingUpIcon,
+  TrendingDown as TrendingDownIcon,
+  AccountBalance as AccountBalanceIcon,
+  ShowChart as ChartIcon,
+  Speed as SpeedIcon,
+  Security as SecurityIcon,
+  Refresh as RefreshIcon,
+  MoreVert as MoreVertIcon,
+} from '@mui/icons-material';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { fetchPortfolioSummary } from '../features/portfolio/portfolioSlice';
+import { ModeSelector } from '../components/dashboard/ModeSelector';
+import { TradingMode } from '../features/mode/modeSlice';
+import { PositionsTable } from '../components/trading/PositionsTable';
+import { ActiveStrategies } from '../components/strategies/ActiveStrategies';
+import { TradeHistory } from '../components/trading/TradeHistory';
+import { MiningMonitor } from '../components/mining/MiningMonitor';
 
-export const Dashboard: React.FC = () => {
-  const navigate = useNavigate();
+interface DashboardCardProps {
+  title: string;
+  value: string | number;
+  change?: number;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  color?: string;
+  loading?: boolean;
+  action?: React.ReactNode;
+}
+
+const DashboardCard: React.FC<DashboardCardProps> = ({ 
+  title, 
+  value, 
+  change, 
+  subtitle, 
+  icon, 
+  color = 'primary.main',
+  loading = false,
+  action,
+}) => {
+  const theme = useTheme();
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <Card 
+        sx={{ 
+          height: '100%',
+          position: 'relative',
+          overflow: 'hidden',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 4,
+            background: `linear-gradient(90deg, ${color} 0%, ${alpha(color, 0.5)} 100%)`,
+          },
+        }}
+      >
+        <CardContent>
+          {loading ? (
+            <>
+              <Skeleton variant="text" width="60%" />
+              <Skeleton variant="text" width="40%" height={32} />
+              <Skeleton variant="text" width="80%" />
+            </>
+          ) : (
+            <>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                  {title}
+                </Typography>
+                {action || (icon && (
+                  <Box sx={{ color: color }}>
+                    {icon}
+                  </Box>
+                ))}
+              </Box>
+              
+              <Typography variant="h4" fontWeight="bold" sx={{ color: color, mb: 1 }}>
+                {value}
+              </Typography>
+              
+              {(change !== undefined || subtitle) && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {change !== undefined && (
+                    <Chip
+                      size="small"
+                      icon={change >= 0 ? <TrendingUpIcon /> : <TrendingDownIcon />}
+                      label={`${change >= 0 ? '+' : ''}${change.toFixed(2)}%`}
+                      sx={{
+                        bgcolor: alpha(change >= 0 ? theme.palette.success.main : theme.palette.error.main, 0.1),
+                        color: change >= 0 ? 'success.main' : 'error.main',
+                        fontWeight: 'bold',
+                        '& .MuiChip-icon': {
+                          color: 'inherit',
+                        },
+                      }}
+                    />
+                  )}
+                  {subtitle && (
+                    <Typography variant="caption" color="text.secondary">
+                      {subtitle}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+};
+
+const Dashboard: React.FC = () => {
+  const theme = useTheme();
   const dispatch = useAppDispatch();
-  const { summary, positions, loading: portfolioLoading } = useAppSelector((state) => state.portfolio);
-  const { activeStrategies, loading: strategiesLoading } = useAppSelector((state) => state.strategies);
-  const { recentTrades, loading: tradesLoading } = useAppSelector((state) => state.trading);
-  const [portfolioHistory, setPortfolioHistory] = useState<Array<{ time: string; value: number }>>([]);
+  const { summary, loading } = useAppSelector((state) => state.portfolio);
+  const { activeMode, modeStatus } = useAppSelector((state) => state.mode);
+  const [portfolioHistory, setPortfolioHistory] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Enable real-time updates
-  usePortfolioUpdates();
-  useStrategyUpdates(activeStrategies.map(s => s.id));
-
-  // Fetch initial data
   useEffect(() => {
     dispatch(fetchPortfolioSummary());
-    dispatch(fetchPortfolioPositions());
-    dispatch(fetchActiveStrategies());
-    dispatch(fetchRecentTrades());
+    const interval = setInterval(() => {
+      dispatch(fetchPortfolioSummary());
+    }, 30000);
+    return () => clearInterval(interval);
   }, [dispatch]);
 
-  // Generate mock portfolio history for demo
   useEffect(() => {
     if (summary?.total_value) {
       const now = new Date();
@@ -58,7 +167,7 @@ export const Dashboard: React.FC = () => {
         const randomChange = (Math.random() - 0.5) * 0.02;
         const value = baseValue * (1 + randomChange + (30 - i) * 0.001);
         data.push({
-          time: date.toISOString(),
+          time: date.toISOString().split('T')[0],
           value: value,
         });
       }
@@ -66,182 +175,239 @@ export const Dashboard: React.FC = () => {
     }
   }, [summary]);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await dispatch(fetchPortfolioSummary());
+    setTimeout(() => setRefreshing(false), 1000);
+  };
+
   const formatCurrency = (value: number | undefined) => {
     if (value === undefined) return '$0.00';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(value);
   };
 
-  const formatLargeCurrency = (value: number | undefined) => {
-    if (value === undefined) return '$0';
-    if (value >= 1000000) {
-      return `$${(value / 1000000).toFixed(2)}M`;
-    } else if (value >= 1000) {
-      return `$${(value / 1000).toFixed(1)}K`;
-    }
-    return formatCurrency(value);
+  const formatPercentage = (value: number | undefined) => {
+    if (value === undefined) return '0%';
+    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
   };
 
-  const handlePositionClick = useCallback((position: any) => {
-    navigate(`/trading?symbol=${position.symbol}`);
-  }, [navigate]);
-
-  const handleStrategyClick = useCallback((strategy: any) => {
-    navigate(`/strategies?id=${strategy.id}`);
-  }, [navigate]);
-
-  const handleTradeClick = useCallback((trade: any) => {
-    navigate(`/trading?symbol=${trade.symbol}`);
-  }, [navigate]);
-
-  return (
-    <Container maxWidth="xl">
-      <Fade in timeout={800}>
-        <Box>
-          <Box mb={4}>
-            <Typography variant="h4" fontWeight="bold">
-              Dashboard
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Real-time portfolio overview and trading activity
-            </Typography>
-          </Box>
-
+  // Mode-specific content
+  const renderModeContent = () => {
+    switch (activeMode) {
+      case 'data-mining':
+        return <MiningMonitor />;
+        
+      case 'auto-trading':
+        return (
           <Grid container spacing={3}>
-            {/* Portfolio Summary Cards - First Row */}
-            <Grid size={12} sm={6} md={3}>
-              <DashboardCard
-                title="Total Portfolio Value"
-                value={formatLargeCurrency(summary?.total_value)}
-                change={summary?.total_change_pct}
-                changeLabel="all time"
-                loading={portfolioLoading}
-                icon={<AccountBalanceIcon />}
-                color="primary"
-                tooltip="Total value of all holdings and cash"
-              />
+            <Grid item xs={12} md={8}>
+              <ActiveStrategies />
             </Grid>
-
-            <Grid size={12} sm={6} md={3}>
-              <DashboardCard
-                title="Day Change"
-                value={formatCurrency(summary?.day_change)}
-                change={summary?.day_change_pct}
-                changeLabel="today"
-                loading={portfolioLoading}
-                icon={<TrendingUpIcon />}
-                color={summary?.day_change_pct && summary.day_change_pct >= 0 ? 'success' : 'error'}
-                tooltip="Today's profit/loss"
-              />
-            </Grid>
-
-            <Grid size={12} sm={6} md={3}>
-              <DashboardCard
-                title="Cash Balance"
-                value={formatCurrency(summary?.cash_balance)}
-                subtitle="Settled funds"
-                loading={portfolioLoading}
-                icon={<AttachMoneyIcon />}
-                color="info"
-                tooltip="Settled cash available"
-              />
-            </Grid>
-
-            <Grid size={12} sm={6} md={3}>
-              <DashboardCard
-                title="Buying Power"
-                value={formatCurrency(summary?.buying_power)}
-                subtitle="Available for trading"
-                loading={portfolioLoading}
-                icon={<AccountBalanceWalletIcon />}
-                color="secondary"
-                tooltip="Total buying power including margin"
-                onClick={() => navigate('/trading')}
-              />
-            </Grid>
-
-            {/* Portfolio Summary Cards - Second Row */}
-            <Grid size={12} sm={6} md={3}>
-              <DashboardCard
-                title="Open P&L"
-                value={formatCurrency(summary?.open_pnl)}
-                change={summary?.open_pnl_pct}
-                loading={portfolioLoading}
-                icon={<ShowChartIcon />}
-                color={summary?.open_pnl && summary.open_pnl >= 0 ? 'success' : 'error'}
-                tooltip="Unrealized profit/loss on open positions"
-              />
-            </Grid>
-
-            {/* Portfolio Performance Chart */}
-            <Grid size={12} md={8}>
-              <Box sx={{ p: 3, height: 400, bgcolor: 'background.paper', borderRadius: 1 }}>
-                <Typography variant="h6" gutterBottom>
-                  Portfolio Performance
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 3, height: 400 }}>
+                <Typography variant="h6" fontWeight="bold" gutterBottom>
+                  Auto Trading Stats
                 </Typography>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  30-day performance
-                </Typography>
-                {portfolioHistory.length > 0 ? (
-                  <MiniChart
-                    data={portfolioHistory}
-                    height={320}
-                    type="area"
-                    showGrid
-                    showAxis
-                  />
-                ) : (
-                  <Box
-                    display="flex"
-                    justifyContent="center"
-                    alignItems="center"
-                    height="calc(100% - 60px)"
-                    color="text.secondary"
-                  >
-                    {portfolioLoading ? 'Loading performance data...' : 'No data available'}
+                <Stack spacing={3} sx={{ mt: 2 }}>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Today's Performance
+                    </Typography>
+                    <Typography variant="h4" color="success.main" fontWeight="bold">
+                      +$1,245.00
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      12 trades executed
+                    </Typography>
                   </Box>
-                )}
-              </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Win Rate
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                      <Typography variant="h5" fontWeight="bold">
+                        67%
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        (8W / 4L)
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Risk Level
+                    </Typography>
+                    <Chip 
+                      label="Conservative" 
+                      color="success" 
+                      size="small"
+                      sx={{ fontWeight: 'bold' }}
+                    />
+                  </Box>
+                </Stack>
+              </Paper>
             </Grid>
-
-            {/* Active Strategies */}
-            <Grid size={12} md={4}>
-              <Box height={400}>
-                <StrategiesWidget
-                  strategies={activeStrategies}
-                  loading={strategiesLoading}
-                  onStrategyClick={handleStrategyClick}
-                  onConfigureStrategy={(id) => navigate(`/strategies?id=${id}&action=configure`)}
-                />
-              </Box>
-            </Grid>
-
-            {/* Active Positions */}
-            <Grid size={12} md={7}>
-              <Box height={400}>
-                <PositionsWidget
-                  positions={positions}
-                  loading={portfolioLoading}
-                  onPositionClick={handlePositionClick}
-                />
-              </Box>
-            </Grid>
-
-            {/* Recent Trades */}
-            <Grid size={12} md={5}>
-              <Box height={400}>
-                <RecentTradesWidget
-                  trades={recentTrades}
-                  loading={tradesLoading}
-                  onTradeClick={handleTradeClick}
-                />
-              </Box>
+            <Grid item xs={12}>
+              <TradeHistory limit={10} />
             </Grid>
           </Grid>
+        );
+        
+      case 'backtesting':
+        return (
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <Paper sx={{ p: 3 }}>
+                <Typography variant="h6" fontWeight="bold" gutterBottom>
+                  Backtesting Results
+                </Typography>
+                <Box sx={{ mt: 3, textAlign: 'center', py: 8 }}>
+                  <Typography variant="h6" color="text.secondary">
+                    No active backtest running
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Configure and start a backtest to see results here
+                  </Typography>
+                </Box>
+              </Paper>
+            </Grid>
+          </Grid>
+        );
+        
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <Container maxWidth="xl" sx={{ py: 3 }}>
+      {/* Mode Selector */}
+      <ModeSelector />
+      
+      {/* Portfolio Summary Cards */}
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" fontWeight="bold">
+            Portfolio Overview
+          </Typography>
+          <Tooltip title="Refresh">
+            <IconButton size="small" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshIcon sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+            </IconButton>
+          </Tooltip>
         </Box>
-      </Fade>
+        
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={6} md={3}>
+            <DashboardCard
+              title="Total Value"
+              value={formatCurrency(summary?.total_value)}
+              change={summary?.daily_pnl_percent}
+              subtitle="Portfolio value"
+              icon={<AccountBalanceIcon />}
+              color={theme.palette.primary.main}
+              loading={loading}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <DashboardCard
+              title="Today's P&L"
+              value={formatCurrency(summary?.daily_pnl)}
+              change={summary?.daily_pnl_percent}
+              icon={summary?.daily_pnl >= 0 ? <TrendingUpIcon /> : <TrendingDownIcon />}
+              color={summary?.daily_pnl >= 0 ? theme.palette.success.main : theme.palette.error.main}
+              loading={loading}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <DashboardCard
+              title="Total P&L"
+              value={formatCurrency(summary?.total_pnl)}
+              change={summary?.total_pnl_percent}
+              subtitle="All time"
+              icon={<ChartIcon />}
+              color={summary?.total_pnl >= 0 ? theme.palette.success.main : theme.palette.error.main}
+              loading={loading}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <DashboardCard
+              title="Win Rate"
+              value={`${summary?.win_rate?.toFixed(1) || 0}%`}
+              subtitle={`${summary?.winning_positions || 0}W / ${summary?.losing_positions || 0}L`}
+              icon={<SpeedIcon />}
+              color={theme.palette.info.main}
+              loading={loading}
+            />
+          </Grid>
+        </Grid>
+      </Box>
+      
+      {/* Mode-specific Content with Animation */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeMode}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.3 }}
+        >
+          {renderModeContent()}
+        </motion.div>
+      </AnimatePresence>
+      
+      {/* Portfolio Chart - Always visible */}
+      <Box sx={{ mt: 4 }}>
+        <Paper sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="h6" fontWeight="bold">
+              Portfolio Value History
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              <Chip label="1D" size="small" />
+              <Chip label="1W" size="small" />
+              <Chip label="1M" size="small" clickable color="primary" />
+              <Chip label="3M" size="small" />
+              <Chip label="1Y" size="small" />
+              <Chip label="ALL" size="small" />
+            </Stack>
+          </Box>
+          
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={portfolioHistory}>
+              <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.divider, 0.5)} />
+              <XAxis dataKey="time" stroke={theme.palette.text.secondary} />
+              <YAxis stroke={theme.palette.text.secondary} />
+              <ChartTooltip />
+              <Line 
+                type="monotone" 
+                dataKey="value" 
+                stroke={theme.palette.primary.main} 
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </Paper>
+      </Box>
+      
+      {/* Positions Table - Always visible */}
+      {activeMode !== 'backtesting' && (
+        <Box sx={{ mt: 4 }}>
+          <PositionsTable />
+        </Box>
+      )}
     </Container>
   );
 };
+
+export default Dashboard;
+export { Dashboard };

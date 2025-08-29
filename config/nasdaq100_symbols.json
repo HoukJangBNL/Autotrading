@@ -1,0 +1,19 @@
+{
+  "name": "NASDAQ 100",
+  "description": "NASDAQ 100 Index Components - Top 100 non-financial NASDAQ companies",
+  "last_updated": "2025-01-28",
+  "symbols": [
+    "AAPL", "ABNB", "ADBE", "ADI", "ADP", "ADSK", "AEP", "ALGN", "AMAT", "AMD",
+    "AMGN", "AMZN", "ANSS", "ASML", "ATVI", "AVGO", "AZN", "BIIB", "BKNG", "BKR",
+    "CDNS", "CDW", "CEG", "CHTR", "CMCSA", "COST", "CPRT", "CRM", "CRWD", "CSCO",
+    "CSGP", "CSX", "CTAS", "CTSH", "DDOG", "DLTR", "DOCU", "DXCM", "EA", "EBAY",
+    "EXC", "FANG", "FAST", "FISV", "FTNT", "GFS", "GILD", "GOOG", "GOOGL", "HON",
+    "IDXX", "ILMN", "INTC", "INTU", "ISRG", "JD", "KDP", "KHC", "KLAC", "LIN",
+    "LRCX", "LULU", "MAR", "MCHP", "MDLZ", "MELI", "META", "MNST", "MRNA", "MRVL",
+    "MSFT", "MU", "NFLX", "NVDA", "NXPI", "ODFL", "ON", "ORLY", "PANW", "PAYX",
+    "PCAR", "PDD", "PEP", "PYPL", "QCOM", "REGN", "ROST", "SBUX", "SGEN", "SIRI",
+    "SNPS", "TEAM", "TMUS", "TSLA", "TTD", "TXN", "VRSK", "VRTX", "WBA", "WBD",
+    "WDAY", "XEL", "ZM", "ZS"
+  ],
+  "count": 104
+}

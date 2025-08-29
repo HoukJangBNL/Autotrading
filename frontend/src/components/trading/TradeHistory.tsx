@@ -120,7 +120,16 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({ trades = [], onExpor
       field: 'executedAt',
       headerName: 'Time',
       width: 150,
-      valueFormatter: (params) => format(new Date(params.value), 'MM/dd HH:mm:ss'),
+      valueFormatter: (params) => {
+        if (!params.value) return '-';
+        try {
+          const date = new Date(params.value);
+          if (isNaN(date.getTime())) return '-';
+          return format(date, 'MM/dd HH:mm:ss');
+        } catch {
+          return '-';
+        }
+      },
     },
     {
       field: 'symbol',
