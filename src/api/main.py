@@ -309,11 +309,28 @@ app.include_router(routers.portfolio_router, prefix="/api/portfolio", tags=["por
 app.include_router(routers.data_mining_router, prefix="/api/data-mining", tags=["data-mining"])
 app.include_router(routers.mining_router, tags=["mining"])  # Note: prefix already in router definition
 
+# Control router for mode/state
+from src.api.routers.control import router as control_router
+app.include_router(control_router)
+
+# Data control endpoints
+from src.api.routers.data_control import router as data_control_router
+app.include_router(data_control_router)
+
 # Import and include historical mining routers
 from src.api.routers import historical_mining
 from src.api.routers import historical_mining_v2
 app.include_router(historical_mining.router)
 app.include_router(historical_mining_v2.router)
+
+# Backtest control endpoints
+from src.api.routers.backtest_control import router as backtest_control_router
+app.include_router(backtest_control_router)
+
+# Strategy control endpoints
+from src.api.routers.strategy_control import router as strategy_control_router
+app.include_router(strategy_control_router)
+
 
 # WebSocket endpoint
 @app.websocket("/ws")

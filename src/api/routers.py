@@ -1,4 +1,14 @@
-"""API routers for different domains."""
+"""DEPRECATED MODULE: src/api/routers.py
+
+This monolithic routers module is retained for backward compatibility only.
+The application uses the package 'src.api.routers' (directory with __init__.py)
+as the source of FastAPI routers. Do not add new endpoints here.
+Prefer adding routers under src/api/routers/ and export them from
+src/api/routers/__init__.py.
+
+This file can be removed once all external references to 'src.api.routers'
+are eliminated and tests validate no regressions.
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Dict, Any, List, Optional

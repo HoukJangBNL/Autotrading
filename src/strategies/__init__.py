@@ -1,19 +1,10 @@
-"""Strategies module for trading strategy implementations.
+"""DEPRECATED PACKAGE: src/strategies
 
-This module contains:
-- BaseStrategy: Abstract base class for all strategies
-- Example strategies: Sample implementations
-- Custom strategies: User-defined trading strategies
+This legacy package is superseded by 'src/strategy' which provides the
+trading strategy framework (BaseStrategy, models, backtesting, examples).
+
+New code should import from 'src.strategy'. This package is kept only to
+avoid breaking imports while migrating older code. Do not add new modules here.
 """
 
-# Base strategy will be imported here
-# from .base import BaseStrategy
-
-# Example strategies will be imported here
-# from .example_strategies import (
-#     SimpleMovingAverageStrategy,
-#     MomentumStrategy,
-#     MeanReversionStrategy
-# )
-
-__all__ = []  # Will be populated as strategies are implemented
+__all__: list[str] = []

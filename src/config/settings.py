@@ -17,7 +17,7 @@ class SchwabSettings(BaseSettings):
     
     api_key: str
     app_secret: str
-    callback_url: str = "https://127.0.0.1:8182/api/auth/callback"
+    callback_url: str = "https://127.0.0.1:8182"
     account_number: Optional[str] = None
     token_path: str = "config/token.json"
 
@@ -31,7 +31,7 @@ class DatabaseSettings(BaseSettings):
     )
     
     database_url: str = "postgresql://user:password@localhost/trading"
-    redis_url: str = "redis://:redis123@localhost:6379/0"
+    redis_url: str = "redis://localhost:6379/0"
     pool_size: int = 20
     max_overflow: int = 40
     pool_timeout: int = 30
