@@ -20,15 +20,16 @@ module.exports = function(app) {
   }
 
   // Proxy API requests to backend
+  const apiTarget = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8182';
   app.use(
     '/api',
     createProxyMiddleware({
-      target: 'https://127.0.0.1:8182',
+      target: apiTarget,
       changeOrigin: true,
       secure: false, // Accept self-signed certificates
       agent: httpsAgent,
       onProxyReq: (proxyReq, req, res) => {
-        console.log(`[Proxy] ${req.method} ${req.path} -> https://127.0.0.1:8182${req.path}`);
+        console.log(`[Proxy] ${req.method} ${req.path} -> ${apiTarget}${req.path}`);
       },
       onError: (err, req, res) => {
         console.error('[Proxy Error]:', err);
@@ -37,10 +38,11 @@ module.exports = function(app) {
   );
 
   // Proxy WebSocket connections
+  const wsTarget = (process.env.REACT_APP_WS_URL || 'wss://127.0.0.1:8182/ws');
   app.use(
     '/ws',
     createProxyMiddleware({
-      target: 'wss://127.0.0.1:8182',
+      target: wsTarget,
       ws: true,
       changeOrigin: true,
       secure: false, // Accept self-signed certificates

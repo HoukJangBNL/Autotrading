@@ -163,6 +163,16 @@ config/token.enc
 data/cache/
 backups/
 
+# Python virtual environments
+.venv311/
+.venv39/
+
+# Runtime files
+.run/
+
+# Local settings
+.claude/settings.local.json
+
 # Schwab API credentials
 config/credentials.json
 config/api_keys.json

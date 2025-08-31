@@ -22,8 +22,8 @@ class WebSocketService {
       return;
     }
     
-    const wsUrl = process.env.REACT_APP_WS_URL || 'wss://127.0.0.1:8182/ws';
-    
+    const wsUrl = process.env.REACT_APP_WS_URL || `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`;
+
     try {
       this.ws = new WebSocket(wsUrl);
       this.setupEventListeners();

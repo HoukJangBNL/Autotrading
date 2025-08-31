@@ -33,20 +33,26 @@ class DatabaseService:
         
         db_url = database_url or settings.get_database_url()
         
-        # Sync engine for migrations and simple operations
+        # Build driver-specific URLs for sync/async
+        # Normalize base PostgreSQL URL without driver suffix
+        if db_url.startswith('postgresql+'):
+            base_url = 'postgresql://' + db_url.split('://', 1)[1]
+        else:
+            base_url = db_url
+
+        # Sync engine (psycopg3)
+        sync_url = base_url.replace('postgresql://', 'postgresql+psycopg://')
         self.engine = create_engine(
-            db_url,
+            sync_url,
             pool_size=settings.database.pool_size,
             max_overflow=settings.database.max_overflow,
             pool_timeout=settings.database.pool_timeout,
             pool_pre_ping=True,
             echo=settings.database.echo
         )
-        
-        # Async engine for high-performance operations
-        # Convert to async URL for PostgreSQL
-        async_url = db_url.replace('postgresql://', 'postgresql+asyncpg://')
-        
+
+        # Async engine (asyncpg)
+        async_url = base_url.replace('postgresql://', 'postgresql+asyncpg://')
         self.async_engine = create_async_engine(
             async_url,
             pool_size=settings.database.pool_size,

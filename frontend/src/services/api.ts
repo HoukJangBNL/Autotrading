@@ -3,9 +3,8 @@ import { store } from '../store/store';
 
 // In development, use relative URLs to work with proxy
 // In production, use the full URL
-const API_BASE_URL = process.env.NODE_ENV === 'development' 
-  ? '' // Empty string for relative URLs in development
-  : (process.env.REACT_APP_API_URL || 'https://127.0.0.1:8182');
+// Always use same-origin base; prefix with /api so Nginx proxy can forward to backend
+const API_BASE_URL = '';
 const API_PREFIX = '/api';
 
 // Create axios instance with default config

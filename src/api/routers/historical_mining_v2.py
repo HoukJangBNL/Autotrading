@@ -77,11 +77,13 @@ async def start_mining_with_mode(
         # Don't pass symbols - let the orchestrator determine them based on mode
         # This allows Gap Filling to use portfolio symbols and Expansion to use all US stocks
         
-        # Start mining in background
-        background_tasks.add_task(
-            orchestrator.execute_mining_with_modes,
-            None,  # Let orchestrator determine symbols based on mode
-            days_back
+        # Start mining in background (fire-and-forget)
+        # Use asyncio.create_task to ensure the coroutine actually starts
+        asyncio.create_task(
+            orchestrator.execute_mining_with_modes(
+                None,  # Let orchestrator determine symbols based on mode
+                days_back
+            )
         )
         
         # Get symbol count based on mode for response

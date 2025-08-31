@@ -53,13 +53,13 @@ services:
       - ./cert.pem:/app/cert.pem
       - ./key.pem:/app/key.pem
     ports:
-      - "8182:8182"
+      - "8182:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8182 --reload --ssl-keyfile=/app/key.pem --ssl-certfile=/app/cert.pem
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 
   # Celery Worker
   celery-worker:
@@ -113,17 +113,14 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: autotrading-frontend
-    environment:
-      REACT_APP_API_URL: https://127.0.0.1:8182
-      REACT_APP_WS_URL: wss://127.0.0.1:8182/ws
+    # No REACT_APP_API_URL here; frontend will call same-origin /api via Nginx proxy
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
     ports:
-      - "3000:3000"
+      - "3000:80"
     depends_on:
       - backend
-    command: npm start
 
   # Nginx (Production only)
   nginx:

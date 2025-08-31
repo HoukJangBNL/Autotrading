@@ -73,18 +73,28 @@ async def oauth_callback(
         accounts = resp.json()
         logger.info(f"OAuth successful, found {len(accounts)} account(s)")
         
-        # Redirect to frontend with success (HTTPS)
-        frontend_url = "https://localhost:3000/auth/success"
+        # Redirect to frontend with success
+        # Honor X-Forwarded-* headers if behind proxy to compute scheme/host
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.url.hostname or "localhost")
+        port = request.headers.get("x-forwarded-port")
+        if port and ":" not in host:
+            host = f"{host}:{port}"
+        frontend_url = f"{scheme}://{host}/auth/success"
         logger.info(f"OAuth successful, redirecting to {frontend_url}")
         return RedirectResponse(url=frontend_url)
         
     except Exception as e:
         logger.error(f"OAuth callback failed: {e}", exc_info=True)
-        # Redirect to frontend with error (HTTPS)
-        # Include error message in query parameter for debugging
+        # Redirect to frontend with error; compute origin from request/proxy headers
         import urllib.parse
         error_msg = urllib.parse.quote(str(e))
-        frontend_url = f"https://localhost:3000/auth/error?error={error_msg}"
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.url.hostname or "localhost")
+        port = request.headers.get("x-forwarded-port")
+        if port and ":" not in host:
+            host = f"{host}:{port}"
+        frontend_url = f"{scheme}://{host}/auth/error?error={error_msg}"
         return RedirectResponse(url=frontend_url)
 
 
