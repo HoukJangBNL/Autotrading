@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Literal
+from typing import Literal, Optional
 
 from src.services.mode_manager import get_mode_manager, Mode
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/control", tags=["control"])
 
 class SetModeRequest(BaseModel):
     mode: Literal["data_mining", "backtesting", "trading"]
-    message: str | None = None
+    message: Optional[str] = None
 
 
 @router.post("/mode")
