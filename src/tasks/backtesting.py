@@ -130,64 +130,67 @@ def optimize_strategy(
     logger.info(f"[Task {self.request.id}] Optimizing strategy {strategy_id}")
     
     try:
-        # Phase 3에서 실제 구현 예정
-        # 현재는 시뮬레이션
-        
-        # 1. 파라미터 조합 생성
-        # param_combinations = generate_parameter_grid(parameter_ranges)
-        total_combinations = 50  # 시뮬레이션
-        
-        # 2. 베이지안 최적화 또는 그리드 서치
-        # optimizer = BayesianOptimizer(objective_function)
-        
-        # 3. 병렬 백테스트 실행
-        tested = 0
-        best_sharpe = 0.0
-        best_params = {}
-        
-        # 진행 상황 업데이트
-        for i in range(min(20, total_combinations)):  # 시뮬레이션: 20개만 테스트
-            tested += 1
-            self.update_state(
-                state='PROGRESS',
-                meta={
-                    'current': tested,
-                    'total': total_combinations,
-                    'best_sharpe': best_sharpe,
-                    'status': f'Testing combination {tested}/{total_combinations}'
-                }
+        from src.api.routers.strategies import STRATEGY_REGISTRY, strategies_store
+        from src.strategy.optimization.objective import ObjectiveConfig
+        from src.strategy.optimization.tuner import optimize as optimize_random
+        from datetime import datetime as dt
+
+        if strategy_id not in strategies_store:
+            raise ValueError(f"Strategy not found: {strategy_id}")
+        strategy_data = strategies_store[strategy_id]
+        strategy_type = strategy_data["type"]
+        if strategy_type not in STRATEGY_REGISTRY:
+            raise ValueError(f"Unknown strategy type: {strategy_type}")
+        strategy_cls = STRATEGY_REGISTRY[strategy_type]
+
+        # Parse dates
+        start_dt = dt.fromisoformat(start_date)
+        end_dt = dt.fromisoformat(end_date)
+
+        # Objective/constraints config (defaults based on user input)
+        cfg = ObjectiveConfig(
+            w1=1.0, w2=1.0, w3=1.0,
+            max_dd_limit_pct=15.0,
+            turnover_limit_annualized_pct=200.0
+        )
+
+        # Run simple random search optimizer
+        best_params, best_trial, trials = asyncio.get_event_loop().run_until_complete(
+            optimize_random(
+                strategy_cls=strategy_cls,
+                symbols=symbols,
+                start_date=start_dt,
+                end_date=end_dt,
+                parameter_ranges=parameter_ranges,
+                objective_cfg=cfg,
+                n_initial_samples=20,
+                seed=42,
             )
-            
-            # 시뮬레이션: 무작위 성능
-            sharpe = np.random.uniform(0.5, 2.5)
-            if sharpe > best_sharpe:
-                best_sharpe = sharpe
-                best_params = {
-                    "fast_period": np.random.randint(5, 20),
-                    "slow_period": np.random.randint(20, 50)
-                }
-        
+        )
+
+        # Progress/meta
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'current': len(trials),
+                'total': len(trials),
+                'status': 'Optimization complete',
+                'best_objective': best_trial.objective,
+            }
+        )
+
         return {
             "status": "success",
             "task_id": self.request.id,
             "strategy_id": strategy_id,
-            "optimization_method": "bayesian",
-            "iterations": tested,
-            "total_combinations": total_combinations,
+            "optimization_method": "random_search",
+            "iterations": len(trials),
             "best_parameters": best_params,
-            "best_performance": {
-                "sharpe_ratio": best_sharpe,
-                "total_return": best_sharpe * 8.5,  # 시뮬레이션
-                "max_drawdown": -5.5 / best_sharpe,  # 시뮬레이션
-                "win_rate": 0.45 + (best_sharpe * 0.1)  # 시뮬레이션
-            },
-            "parameter_importance": {
-                "fast_period": 0.7,
-                "slow_period": 0.3
-            },
-            "message": f"Found optimal parameters after {tested} iterations"
+            "best_performance": best_trial.metrics,
+            "all_trials": [t.metrics for t in trials],
+            "message": f"Found optimal parameters after {len(trials)} evaluations"
         }
-    
+
     except Exception as e:
         logger.error(f"[Task {self.request.id}] Error in optimization: {e}")
         return {

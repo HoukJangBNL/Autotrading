@@ -10,7 +10,7 @@ import pandas as pd
 from dataclasses import dataclass, field
 
 from ..base import BaseStrategy
-from ..models import Signal, Trade, Position, Order, OrderSide, OrderStatus
+from ..models import Signal, Trade, Position, Order, OrderSide, OrderStatus, OrderType
 from ...data.models import Candle, TimeFrame
 from ...data.database import get_db
 
@@ -27,24 +27,25 @@ class BacktestResult:
     end_date: datetime
     initial_capital: float
     final_capital: float
-    
+
     # Trade statistics
     total_trades: int
     winning_trades: int
     losing_trades: int
     win_rate: float
-    
+
     # Returns
     total_return: float
     total_return_pct: float
     annualized_return: float
-    
+
     # Risk metrics
     sharpe_ratio: float
     sortino_ratio: float
     max_drawdown: float
     max_drawdown_duration: int  # days
-    
+    turnover_annualized_pct: float  # Annualized turnover in percent
+
     # Trade analysis
     avg_win: float
     avg_loss: float
@@ -52,12 +53,12 @@ class BacktestResult:
     largest_loss: float
     avg_trade_duration: float  # hours
     profit_factor: float
-    
+
     # Additional metrics
     trades: List[Trade] = field(default_factory=list)
     equity_curve: List[Dict[str, Any]] = field(default_factory=list)
     daily_returns: List[float] = field(default_factory=list)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -77,6 +78,7 @@ class BacktestResult:
             'sortino_ratio': self.sortino_ratio,
             'max_drawdown': self.max_drawdown,
             'max_drawdown_duration': self.max_drawdown_duration,
+            'turnover_annualized_pct': self.turnover_annualized_pct,
             'avg_win': self.avg_win,
             'avg_loss': self.avg_loss,
             'largest_win': self.largest_win,
@@ -405,12 +407,32 @@ class BacktestEngine:
         days = (end_date - start_date).days
         years = days / 365.25
         annualized_return = ((final_capital / initial_capital) ** (1 / years) - 1) * 100 if years > 0 else 0
-        
+
+        # Calculate turnover (annualized)
+        # Approximate total traded notional = sum of entry and exit notionals across trades
+        total_traded_notional = 0.0
+        for t in trades:
+            try:
+                entry_val = float(t.entry_price * t.quantity)
+                exit_val = float(t.exit_price * t.quantity)
+            except Exception:
+                entry_val = float(t.entry_price) * float(t.quantity)
+                exit_val = float(t.exit_price) * float(t.quantity)
+            total_traded_notional += abs(entry_val) + abs(exit_val)
+        # Average NAV across the period
+        if equity_curve:
+            avg_nav = float(np.mean([pt['capital'] for pt in equity_curve]))
+        else:
+            avg_nav = (initial_capital + final_capital) / 2.0
+        period_turnover = (total_traded_notional / avg_nav) if avg_nav > 0 else 0.0
+        annualization_factor = (365.25 / days) if days > 0 else 0.0
+        turnover_annualized_pct = period_turnover * annualization_factor * 100.0
+
         # Calculate risk metrics
         sharpe_ratio = self._calculate_sharpe_ratio(daily_returns, self.risk_free_rate)
         sortino_ratio = self._calculate_sortino_ratio(daily_returns, self.risk_free_rate)
         max_drawdown, max_dd_duration = self._calculate_max_drawdown(equity_curve)
-        
+
         return BacktestResult(
             strategy_name=strategy.name,
             start_date=start_date,
@@ -428,6 +450,7 @@ class BacktestEngine:
             sortino_ratio=sortino_ratio,
             max_drawdown=max_drawdown,
             max_drawdown_duration=max_dd_duration,
+            turnover_annualized_pct=turnover_annualized_pct,
             avg_win=avg_win,
             avg_loss=avg_loss,
             largest_win=largest_win,
@@ -664,6 +687,7 @@ class BacktestEngine:
             sortino_ratio=0.0,
             max_drawdown=0.0,
             max_drawdown_duration=0,
+            turnover_annualized_pct=0.0,
             avg_win=0.0,
             avg_loss=0.0,
             largest_win=0.0,
